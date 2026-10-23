@@ -693,7 +693,9 @@ let cfg={...DEFAULTS,...store.get('avio_cfg',{})};
 function saveCfg(){store.set('avio_cfg',cfg,cfg.remember)}
 /* data connections: cfg.sources = [{id, mode: github|url|device|demo, repo, branch, path, url}], cfg.active = the one in use */
 if(!Array.isArray(cfg.sources)){cfg.sources=cfg.dataMode&&cfg.dataMode!=='none'?[{id:'s1',mode:cfg.dataMode,repo:cfg.dataRepo,branch:cfg.dataBranch,path:cfg.dataPath,url:cfg.dataUrl}]:[];cfg.active=(cfg.sources[0]||{}).id||''}
+for(const x of cfg.sources)if(x.mode==='github'&&x.token==null&&cfg.githubToken)x.token=cfg.githubToken; // each connection keeps its own token
 function activeSrc(){return cfg.sources.find(x=>x.id===cfg.active)||null}
+function curTok(){const x=activeSrc();return (x&&x.token)||''}
 function applySource(){const x=activeSrc();Object.assign(cfg,x?{dataMode:x.mode,dataRepo:x.repo||'',dataBranch:x.branch||'main',dataPath:x.path||'',dataUrl:x.url||''}:{dataMode:'none'})}
 applySource();
 function srcLabel(x){return x.mode==='github'?(x.repo||'GitHub repo')+(x.path?' / '+x.path:''):x.mode==='url'?String(x.url||'').replace(/^https?:\/\//,''):x.mode==='demo'?'Demo aircraft (fictional)':x.mode==='device'?'Data on this device':'Not set'}
@@ -734,14 +736,14 @@ let DPATH='';
 const slashDir=p=>{p=String(p||'').trim().replace(/^\/+/,'');return p&&!p.endsWith('/')?p+'/':p};
 function srcKey(){return cfg.dataMode==='github'?`gh:${cfg.dataRepo}@${cfg.dataBranch}/${slashDir(cfg.dataPath)}`:cfg.dataMode==='url'?`url:${cfg.dataUrl}`:cfg.dataMode}
 function dataKey(root){return srcKey()+(!root&&DPATH?'/'+DPATH:'')}
-function dataConnected(){return cfg.dataMode==='demo'||cfg.dataMode==='device'||(cfg.dataMode==='github'&&!!cfg.dataRepo&&!!cfg.githubToken)||(cfg.dataMode==='url'&&!!cfg.dataUrl)}
+function dataConnected(){return cfg.dataMode==='demo'||cfg.dataMode==='device'||(cfg.dataMode==='github'&&!!cfg.dataRepo&&!!curTok())||(cfg.dataMode==='url'&&!!cfg.dataUrl)}
 function fetchErr(status,P,hint){const e=new Error(`Data fetch failed (${status}) for ${P}${hint||''}`);e.status=status;return e}
 async function rawFetch(path,{root=false}={}){
   const P=(root?'':DPATH)+path;let res;
   if(cfg.dataMode==='github'){
     if(!cfg.dataRepo)throw new Error('No data repo set (Settings).');
-    if(!cfg.githubToken) throw new Error('No GitHub token set (Settings).');
-    res=await fetch(`https://api.github.com/repos/${cfg.dataRepo}/contents/${slashDir(cfg.dataPath)}${P}?ref=${encodeURIComponent(cfg.dataBranch||'main')}`,{headers:{Authorization:`Bearer ${cfg.githubToken}`,Accept:'application/vnd.github.raw','X-GitHub-Api-Version':'2022-11-28'},cache:'no-store'});
+    if(!curTok()) throw new Error('No GitHub token set for this connection (Settings).');
+    res=await fetch(`https://api.github.com/repos/${cfg.dataRepo}/contents/${slashDir(cfg.dataPath)}${P}?ref=${encodeURIComponent(cfg.dataBranch||'main')}`,{headers:{Authorization:`Bearer ${curTok()}`,Accept:'application/vnd.github.raw','X-GitHub-Api-Version':'2022-11-28'},cache:'no-store'});
   } else if(cfg.dataMode==='device'){
     let r=null;try{const c=await caches.open(DEV_CACHE);r=await c.match(DEV_ROOT+P)}catch(e){}
     if(!r)throw fetchErr(404,P,' — not in the data imported on this device');
@@ -1809,8 +1811,8 @@ function openSettings(note,welcome){
   <div id="stGh">
     <div class="grid2"><div class="field"><label>Data repo (owner/name)</label><input id="stRepo" value="${esc(cfg.dataRepo)}" placeholder="your-org/maintenance-data" autocomplete="off" autocapitalize="off"></div><div class="field"><label>Branch</label><input id="stBranch" value="${esc(cfg.dataBranch||'main')}" autocapitalize="off"></div></div>
     <div class="field"><label>Folder in repo (optional)</label><input id="stPath" value="${esc(cfg.dataPath)}" placeholder="e.g. data/" autocapitalize="off"></div>
-    <div class="field"><label>GitHub token (read-only)</label><input id="stTok" type="password" value="${esc(cfg.githubToken)}" placeholder="github_pat_…" autocomplete="off">
-    <div class="hint">A fine-grained token from your organization's own GitHub account with <b>Contents: Read-only</b> on the data repo only.</div></div>
+    <div class="field"><label>GitHub token for this connection (read-only)</label><input id="stTok" type="password" value="${esc(cfg.sources.length?curTok():cfg.githubToken)}" placeholder="github_pat_…" autocomplete="off">
+    <div class="hint">A fine-grained token from your organization's own GitHub account with <b>Contents: Read-only</b> on this data repo. Each connection keeps its own token.</div></div>
   </div>
   <div id="stUrl" class="field"><label>Data URL</label><input id="stDataUrl" value="${esc(cfg.dataUrl)}" placeholder="https://data.your-company.com/avio/" autocapitalize="off">
     <div class="hint">A web folder your organization controls that serves the data set files to this app.</div></div>
@@ -1844,11 +1846,12 @@ function openSettings(note,welcome){
   const sync=()=>{const v=$('#stMode').value;$('#stGh').classList.toggle('hidden',v!=='github');$('#stUrl').classList.toggle('hidden',v!=='url');$('#stDev').classList.toggle('hidden',v!=='device');$('#stDemoNote').classList.toggle('hidden',v!=='demo');$('#stOffWrap').classList.toggle('hidden',v==='device'||v==='none')};sync();$('#stMode').onchange=sync;
   devFileCount().then(n=>{const e=$('#stDevInfo');if(e)e.textContent=n?`${n.toLocaleString()} data files are stored on this device. Import again to replace them.`:'No data imported on this device yet. Pick your data set folder, or a .zip of it.'});
   const st=t=>{const e=$('#stStatus');if(e)e.innerHTML=t};
-  const fill=()=>{const id=$('#stSrc').value,x=cfg.sources.find(y=>y.id===id)||{mode:'none'};$('#stMode').value=x.mode;$('#stRepo').value=x.repo||'';$('#stBranch').value=x.branch||'main';$('#stPath').value=x.path||'';$('#stDataUrl').value=x.url||'';$('#stSrcDel').classList.toggle('hidden',id==='__new');sync()};
+  const fill=()=>{const id=$('#stSrc').value,x=cfg.sources.find(y=>y.id===id)||{mode:'none'};$('#stMode').value=x.mode;$('#stRepo').value=x.repo||'';$('#stBranch').value=x.branch||'main';$('#stPath').value=x.path||'';$('#stDataUrl').value=x.url||'';$('#stTok').value=id==='__new'?(cfg.githubToken||''):(x.token||'');$('#stSrcDel').classList.toggle('hidden',id==='__new');sync()};
   $('#stSrc').onchange=fill;
-  const collect=()=>{syFromSettings();Object.assign(cfg,{anthropicKey:$('#stKey').value.trim(),model:$('#stModel').value,thinking:$('#stThink').checked,githubToken:$('#stTok').value.trim(),remember:$('#stRemember').checked});
+  const collect=()=>{syFromSettings();Object.assign(cfg,{anthropicKey:$('#stKey').value.trim(),model:$('#stModel').value,thinking:$('#stThink').checked,remember:$('#stRemember').checked});
     const sel=$('#stSrc').value,mode=$('#stMode').value;
-    if(mode!=='none'){const x={mode,repo:$('#stRepo').value.trim(),branch:$('#stBranch').value.trim()||'main',path:$('#stPath').value.trim(),url:$('#stDataUrl').value.trim()};
+    if(mode!=='none'){const tok=$('#stTok').value.trim();if(tok)cfg.githubToken=tok;
+      const x={mode,token:mode==='github'?tok:'',repo:$('#stRepo').value.trim(),branch:$('#stBranch').value.trim()||'main',path:$('#stPath').value.trim(),url:$('#stDataUrl').value.trim()};
       if(sel==='__new'){x.id='s'+Date.now().toString(36);cfg.sources.push(x)}else{x.id=sel;const i=cfg.sources.findIndex(y=>y.id===sel);if(i>=0)cfg.sources[i]=x;else cfg.sources.push(x)}
       cfg.active=x.id}
     applySource();saveCfg()};
@@ -1982,7 +1985,6 @@ $('#btnStart').onclick=async()=>{
   if(!f.faults.length&&!f.cmc.length&&!f.desc){$('#descText').focus();flash($('#btnStart'),'ENTER A MESSAGE OR DESCRIPTION');return}
   if(!DATA.ready){openSettings('Connect your data first.',!dataConnected());return}
   if(!cfg.anthropicKey){openSettings('Add your Anthropic API key to start troubleshooting.');return}
-  if(f.reg||f.sn)store.set(LAST_AC_KEY,{reg:f.reg,sn:f.sn});
   const text=caseText(f);
   f.faults.forEach(x=>{if(x.cite&&x.doc!=null)registerSource({cite:x.cite,doc_id:x.doc,pdf_page:x.page})});
   f.cmc.forEach(x=>(x.refs||[]).forEach(r=>registerSource({cite:r[2],doc_id:r[0],pdf_page:r[1]})));
@@ -2039,7 +2041,8 @@ $('#btnCases').onclick=()=>{
 };
 $('#btnNew').onclick=()=>{if(BUSY)ABORT?.abort();CASE=null;try{localStorage.removeItem(PFX+'_current')}catch(e){}resetForm();showIntake()};
 let APPNAME='Avio.AI',SN_HINT='';const LAST_AC_KEY=PFX+'_lastac';
-function prefillAircraft(){const l=store.get(LAST_AC_KEY,null);if(l){if(!$('#fReg').value)$('#fReg').value=l.reg||'';if(!$('#fSn').value)$('#fSn').value=l.sn||''}}
+try{for(const k of Object.keys(localStorage))if(/^avio_.*_lastac$/.test(k))localStorage.removeItem(k)}catch(e){} // tails are no longer remembered
+function prefillAircraft(){const PK=PFX+'_pendingtail',l=store.get(PK,null);store.del(PK);if(l){if(!$('#fReg').value)$('#fReg').value=l.reg||'';if(!$('#fSn').value)$('#fSn').value=l.sn||''}}
 prefillAircraft();
 /* ═════════════════ CASE SYNC (private GitHub repo: the same case history on every device) ═════════════════ */
 // cases/<TYPE>/<id>.json in the cases repo, one commit per save. Settings are shared by every aircraft type on this site.
@@ -2316,7 +2319,7 @@ $('#btnExport').onclick=()=>{
     <button class="btn2" id="exMd" style="width:100%;margin-top:12px">Download Markdown (.md)</button>
     ${melOps().amdl?`<button class="btn2" id="exAmdl" style="width:100%;margin-top:12px">${esc(formTitle())} (${CASE.clearing?'Completed':CASE.deferral?'MEL Deferral':'Discrepancy'})</button>`:''}`);
   if($('#exAmdl'))$('#exAmdl').onclick=async()=>{sync();if(CASE.deferral)try{await loadMel()}catch(e){}openCaseAmdl()};
-  const sync=()=>{f.reg=$('#exReg').value.trim().toUpperCase();f.sn=$('#exSn').value.trim();if(f.reg||f.sn)store.set(LAST_AC_KEY,{reg:f.reg,sn:f.sn});saveCase()};
+  const sync=()=>{f.reg=$('#exReg').value.trim().toUpperCase();f.sn=$('#exSn').value.trim();saveCase()};
   $('#exMd').onclick=()=>{sync();exportMarkdown()};
   $('#exPdf').onclick=async()=>{
     sync();const btn=$('#exPdf');btn.disabled=true;btn.textContent='Creating PDF…';$('#exOut').innerHTML='';
@@ -2670,13 +2673,13 @@ async function buildMelPdf(meta,g,r){
   return doc.output('blob');
 }
 function melExport(g,r){
-  const last=store.get(LAST_AC_KEY,null)||{};
+  const last={};
   const reg0=val('#fReg')||last.reg||'',sn0=val('#fSn')||last.sn||'';
   showModal('MEL DEFERRAL PDF',`<div class="kv"><b>${esc(melTitle(g))}</b><br>Category ${esc(r.cat)} · ${esc(melOps().label)} · discovered ${esc(fmtDate(parseDay($('#melDate').value)))}</div>
     <div class="grid2"><div class="field"><label>Registration</label><input id="exReg" value="${esc(reg0)}" placeholder="N1KE" autocapitalize="characters" autocomplete="off"></div><div class="field"><label>Serial number</label><input id="exSn" value="${esc(sn0)}" placeholder="${esc(SN_HINT)}" autocomplete="off"></div></div>
     <button class="btn" id="exPdf">Create PDF</button><div id="exOut" style="margin-top:12px"></div>`);
   $('#exPdf').onclick=async()=>{
-    const reg=$('#exReg').value.trim().toUpperCase(),sn=$('#exSn').value.trim();if(reg||sn)store.set(LAST_AC_KEY,{reg,sn});
+    const reg=$('#exReg').value.trim().toUpperCase(),sn=$('#exSn').value.trim();
     const btn=$('#exPdf');btn.disabled=true;btn.textContent='Creating PDF…';$('#exOut').innerHTML='';
     try{
       const f=collectForm();
@@ -2769,7 +2772,7 @@ async function buildAmdl(v){
 }
 // open the AMDL form; pre = {disc, deferral:{g,r}} from the MEL tab or a troubleshooting case
 function openAmdl(pre){
-  pre=pre||{};const f=collectForm();const last=store.get(LAST_AC_KEY,null)||{};const me=store.get(AMDL_PERSON_KEY,{})||{};
+  pre=pre||{};const f=collectForm();const last={};const me=store.get(AMDL_PERSON_KEY,{})||{};
   const def=pre.deferral;const disc=pre.discDate||parseDay($('#melDate')?.value);const today=new Date();
   const ref=def?(def.g.kind==='cas'?`MEL CAS - ${def.g.name}`:`MEL ${def.g.ata}-${def.g.seq}${def.g.k.split('-').length>2?'-'+def.g.k.split('-').slice(2).join('-'):''}`):'';
   const iv=def?melInterval(def.r,melOps(),disc):null;
@@ -2819,7 +2822,6 @@ function openAmdl(pre){
       mx:g('amMx'),corr:g('amCorr'),pnOff:g('amPnOff'),snOff:g('amSnOff'),pnOn:g('amPnOn'),snOn:g('amSnOn'),sigName:g('amSigName'),sigCert:g('amSigCert'),sigLoc:g('amSigLoc').toUpperCase(),sigDate:g('amSigDate')};
     if(!v.corr&&!v.mx){v.sigName=v.sigCert=v.sigLoc=v.sigDate=''}
     store.set(AMDL_PERSON_KEY,{initBy:v.initBy,name:v.defName||v.sigName||me.name||'',cert:v.defCert||v.sigCert||me.cert||'',loc:v.defLoc||me.loc||''});
-    if(v.reg)store.set(LAST_AC_KEY,{reg:v.reg,sn:f.sn||last.sn||''});
     if(pre.caseBound&&CASE){const o={};for(const [k,id] of Object.entries(AMDL_IDS)){const e=$('#'+id);if(e)o[k]=e.value.trim()}o.savedAt=Date.now();if(CASE.clearing)o.clearAt=CASE.clearing.at;CASE.amdl=o;saveCase();refreshCaseCard()}
     const btn=$('#amGo');btn.disabled=true;btn.textContent='Creating…';$('#amOut').innerHTML='';
     try{
@@ -2920,10 +2922,10 @@ $('#wGo').onclick=doWiring;$('#wQuery').addEventListener('keydown',e=>{if(e.key=
 function openFleet(){
   const E=fleetEntries();if(!E.length){openSettings();return}
   const rd=k=>{try{return JSON.parse(localStorage.getItem(k)||'null')}catch(e){return null}};
-  const tailsFor=e=>{const P=pfxFor(e.src.id,e.t.id),set=new Map();const last=rd(P+'_lastac');if(last&&last.reg)set.set(String(last.reg).toUpperCase(),last.sn||'');
+  const tailsFor=e=>{const P=pfxFor(e.src.id,e.t.id),set=new Map();
     for(const c of rd(P+'_cases')||[]){const r=c&&c.form&&String(c.form.reg||'').toUpperCase();if(r&&!set.has(r))set.set(r,c.form.sn||'')}return set};
   const isCur=e=>e.src.id===cfg.active&&((FC&&FC.id)||null)===e.t.id;
-  const go=(e,reg,sn)=>{try{cfg.active=e.src.id;applySource();saveCfg();localStorage.setItem('avio_ac',JSON.stringify({src:e.src.id,type:e.t.id}));if(reg)localStorage.setItem(pfxFor(e.src.id,e.t.id)+'_lastac',JSON.stringify({reg,sn:sn||''}))}catch(err){}location.reload()};
+  const go=(e,reg,sn)=>{try{cfg.active=e.src.id;applySource();saveCfg();localStorage.setItem('avio_ac',JSON.stringify({src:e.src.id,type:e.t.id}));if(reg)localStorage.setItem(pfxFor(e.src.id,e.t.id)+'_pendingtail',JSON.stringify({reg,sn:sn||''}))}catch(err){}location.reload()};
   const many=cfg.sources.length>1;
   const rows=E.map((e,i)=>{const tl=[...tailsFor(e)];
     return `<div class="row" data-i="${i}"><span class="ico"><span class="ms">flight</span></span><div><div class="t">${esc(e.t.name||e.t.id||'Aircraft')}</div><div class="s">${esc(e.t.full||'')}${e.t.mode==='mel'?' · MEL only':''}${many&&!e.t.pending?' · '+esc(srcLabel(e.src)):''}${tl.length?' · '+tl.length+' tail'+(tl.length>1?'s':''):''}</div></div>${isCur(e)?'<span class="ms cur">check_circle</span>':''}</div>
