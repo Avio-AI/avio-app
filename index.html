@@ -677,8 +677,11 @@ const MODELS=[['claude-opus-5-5','Claude Opus 5.5 — Most Rigorous'],['claude-s
 /* Avio.AI ships with no maintenance data. Every manual, index and form comes from the data set the operator connects
    (their own GitHub repo, web address, or files imported onto this device). Settings are shared by every aircraft type;
    cases and per-aircraft state are kept per type (PFX). */
-const AC0=(()=>{try{return JSON.parse(localStorage.getItem('avio_ac')||'null')}catch(e){return null}})();
-const PFX='avio_'+(String(AC0||'default').toLowerCase().replace(/[^a-z0-9]+/g,'')||'default');
+// avio_ac = {src: connection id, type: aircraft type id or null}; cases and per-aircraft state are kept per type (PFX)
+const AC0=(()=>{try{const v=JSON.parse(localStorage.getItem('avio_ac')||'null');return v&&typeof v==='object'?v:(v?{src:null,type:v}:null)}catch(e){return null}})();
+const slugId=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'');
+const pfxFor=(src,type)=>'avio_'+(slugId(type)||slugId(src)||'default');
+const PFX=pfxFor(AC0&&AC0.src,AC0&&AC0.type);
 let FLEET=null,FC=null,OPERATOR=null,PROFILE={};
 const DEFAULTS={anthropicKey:'',githubToken:'',dataRepo:'',dataBranch:'main',dataPath:'',dataMode:'none',dataUrl:'',model:'claude-opus-5-5',thinking:true,remember:true,theme:'auto'};
 const store={
@@ -688,6 +691,16 @@ const store={
 };
 let cfg={...DEFAULTS,...store.get('avio_cfg',{})};
 function saveCfg(){store.set('avio_cfg',cfg,cfg.remember)}
+/* data connections: cfg.sources = [{id, mode: github|url|device|demo, repo, branch, path, url}], cfg.active = the one in use */
+if(!Array.isArray(cfg.sources)){cfg.sources=cfg.dataMode&&cfg.dataMode!=='none'?[{id:'s1',mode:cfg.dataMode,repo:cfg.dataRepo,branch:cfg.dataBranch,path:cfg.dataPath,url:cfg.dataUrl}]:[];cfg.active=(cfg.sources[0]||{}).id||''}
+function activeSrc(){return cfg.sources.find(x=>x.id===cfg.active)||null}
+function applySource(){const x=activeSrc();Object.assign(cfg,x?{dataMode:x.mode,dataRepo:x.repo||'',dataBranch:x.branch||'main',dataPath:x.path||'',dataUrl:x.url||''}:{dataMode:'none'})}
+applySource();
+function srcLabel(x){return x.mode==='github'?(x.repo||'GitHub repo')+(x.path?' / '+x.path:''):x.mode==='url'?String(x.url||'').replace(/^https?:\/\//,''):x.mode==='demo'?'Demo aircraft (fictional)':x.mode==='device'?'Data on this device':'Not set'}
+// aircraft in every connection, from what each connection listed the last time it was opened
+function fleetEntries(){const fc=store.get('avio_fleetcache',{});const out=[];
+  for(const x of cfg.sources)for(const t of (fc[x.id]||[{id:null,name:srcLabel(x),full:'Not opened yet on this device',mode:'full',pending:true}]))out.push({src:x,t});return out}
+function srcName(x){const ts=(store.get('avio_fleetcache',{})[x.id]||[]).map(t=>t.name).filter(Boolean);return (ts.length?ts.join(', ')+' · ':'')+srcLabel(x)}
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 // all dates: 21 OCT 2026
 const MONS=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
@@ -766,10 +779,10 @@ async function loadFleet(){
   const f=await optional(fetchData('fleet.json',{cache:false,root:true}));
   FLEET=f?(Array.isArray(f)?f:f.types||null):null;
   if(FLEET&&FLEET.length){
-    FC=FLEET.find(t=>t.id===AC0)||FLEET[0];
-    if(FC.id!==AC0){store.set('avio_ac',FC.id);location.reload();return false} // per-aircraft storage follows the type
+    FC=FLEET.find(t=>t.id===(AC0&&AC0.type))||FLEET[0];
+    if(!AC0||AC0.src!==cfg.active||AC0.type!==FC.id){store.set('avio_ac',{src:cfg.active,type:FC.id});location.reload();return false} // per-aircraft storage follows the type
     DPATH=slashDir(FC.path||'');
-  }
+  } else if(!AC0||AC0.src!==cfg.active||AC0.type){store.set('avio_ac',{src:cfg.active,type:null});location.reload();return false}
   OPERATOR=await optional(fetchData('operator.json',{cache:false,root:true}));
   applyOperator();
   return true;
@@ -787,7 +800,9 @@ async function loadCore(){
     DATA.byCite=new Map(DATA.catalog.filter(d=>d.c).map(d=>[normCite(d.c),d]));
     const pm=PROFILE.pagemap||DATA.manifest.pagemap;DATA.pagemap=pm?await optional(fetchData(pm)):null;DATA.docShard=new Map();
     DATA.wsys=new Map(DATA.catalog.filter(isWiring).map(d=>[wsysName(d),d]));
-    DATA.ready=true; setDot('ok'); applyProfileUi(); renderBadges(); fillChapterSelect();
+    DATA.ready=true; setDot('ok');
+    {const fc=store.get('avio_fleetcache',{});fc[cfg.active]=FLEET&&FLEET.length?FLEET.map(t=>({id:t.id,name:t.name||t.id,full:t.full||'',mode:t.mode||'full'})):[{id:null,name:PROFILE.short,full:PROFILE.aircraft,mode:'full'}];store.set('avio_fleetcache',fc)}
+    applyProfileUi(); renderBadges(); fillChapterSelect();
   }catch(e){
     setDot('err'); renderBadges(e.message); console.error(e);
   }
@@ -832,7 +847,7 @@ function applyProfileUi(){
   document.querySelector('.tab[data-tab=wiring]')?.classList.toggle('hidden',!DATA.manifest.wiring);
   document.querySelector('.tab[data-tab=mel]')?.classList.toggle('hidden',!DATA.manifest.mel);
   document.querySelector('.tab[data-tab=search]')?.classList.toggle('hidden',!DATA.catalog.length);
-  const caret=$('#fleetCaret');if(caret)caret.classList.toggle('hidden',!(FLEET&&FLEET.length>1));
+  const caret=$('#fleetCaret');if(caret)caret.classList.toggle('hidden',!(fleetEntries().length>1));
   if(PROFILE.disclaimer){const d=$('#mainDisclaimer');if(d)d.textContent=PROFILE.disclaimer}
 }
 // which shard holds a page: the document's own shard, a page-range map (profile.pagemap: {doc id: [[first, last, shard]]}),
@@ -1788,6 +1803,8 @@ function openSettings(note,welcome){
   ${welcome?`<div class="kv" style="margin-bottom:12px"><b>Avio.AI contains no maintenance data.</b> It works from the data your organization already holds under its own licenses, kept in a place you control: your own GitHub repo, your own web server, or files imported onto this device. Connect your data set below, or try the demo aircraft (invented data, not for maintenance use) to see how it works.</div><button class="btn" id="stDemo" style="margin-bottom:14px">Try the Demo Aircraft</button>`:''}
   ${note?`<div class="errbox" style="margin-bottom:12px;color:var(--amber);border-color:var(--amber-dim);background:var(--warn-bg)">${esc(note)}</div>`:''}
   <h3 class="amh">Your Data</h3>
+  <div class="field"><label>Connection</label><select id="stSrc">${cfg.sources.map(x=>`<option value="${esc(x.id)}" ${x.id===cfg.active?'selected':''}>${esc(srcName(x))}</option>`).join('')}<option value="__new" ${cfg.sources.length?'':'selected'}>＋ Add a Connection</option></select>
+  <div class="hint">Each connection is one data set: one repo, web folder or device import. The aircraft picker in the top bar lists the aircraft from all of them.</div></div>
   <div class="field"><label>Data source</label><select id="stMode"><option value="none" ${cfg.dataMode==='none'?'selected':''}>— Not Connected —</option>${modes.map(([v,l])=>`<option value="${v}" ${cfg.dataMode===v?'selected':''}>${l}</option>`).join('')}</select></div>
   <div id="stGh">
     <div class="grid2"><div class="field"><label>Data repo (owner/name)</label><input id="stRepo" value="${esc(cfg.dataRepo)}" placeholder="your-org/maintenance-data" autocomplete="off" autocapitalize="off"></div><div class="field"><label>Branch</label><input id="stBranch" value="${esc(cfg.dataBranch||'main')}" autocapitalize="off"></div></div>
@@ -1803,6 +1820,7 @@ function openSettings(note,welcome){
     <div class="hint">The data set stays in this app's storage on this device only. On iPhone and iPad, import a .zip.</div>
     <button class="btn2 small danger" id="stDevClear" style="margin-top:8px">Remove Imported Data From This Device</button>
   </div>
+  <button class="btn2 small danger hidden" id="stSrcDel" style="margin:4px 0 10px">Remove This Connection</button>
   <div id="stDemoNote" class="hint">The demo aircraft uses invented manuals, fault messages, wiring and MEL items so you can try every feature. None of it is real maintenance data.</div>
   <hr style="border:none;border-top:1px solid var(--border);margin:14px 0">
   <h3 class="amh">AI Assistant</h3>
@@ -1826,18 +1844,29 @@ function openSettings(note,welcome){
   const sync=()=>{const v=$('#stMode').value;$('#stGh').classList.toggle('hidden',v!=='github');$('#stUrl').classList.toggle('hidden',v!=='url');$('#stDev').classList.toggle('hidden',v!=='device');$('#stDemoNote').classList.toggle('hidden',v!=='demo');$('#stOffWrap').classList.toggle('hidden',v==='device'||v==='none')};sync();$('#stMode').onchange=sync;
   devFileCount().then(n=>{const e=$('#stDevInfo');if(e)e.textContent=n?`${n.toLocaleString()} data files are stored on this device. Import again to replace them.`:'No data imported on this device yet. Pick your data set folder, or a .zip of it.'});
   const st=t=>{const e=$('#stStatus');if(e)e.innerHTML=t};
-  const collect=()=>{syFromSettings();Object.assign(cfg,{anthropicKey:$('#stKey').value.trim(),model:$('#stModel').value,thinking:$('#stThink').checked,dataMode:$('#stMode').value,dataRepo:$('#stRepo').value.trim(),dataBranch:$('#stBranch').value.trim()||'main',dataPath:$('#stPath').value.trim(),githubToken:$('#stTok').value.trim(),dataUrl:$('#stDataUrl').value.trim(),remember:$('#stRemember').checked});saveCfg()};
-  const doImport=async entries=>{try{st('Importing…');const n=await importToDevice(entries,st);$('#stMode').value='device';collect();st(`<span style="color:var(--green)">✔ ${n.toLocaleString()} files imported. Connecting…</span>`);setTimeout(connectFresh,600)}catch(e){st(`<span style="color:var(--red)">✖ ${esc(e.message||e)}</span>`)}};
+  const fill=()=>{const id=$('#stSrc').value,x=cfg.sources.find(y=>y.id===id)||{mode:'none'};$('#stMode').value=x.mode;$('#stRepo').value=x.repo||'';$('#stBranch').value=x.branch||'main';$('#stPath').value=x.path||'';$('#stDataUrl').value=x.url||'';$('#stSrcDel').classList.toggle('hidden',id==='__new');sync()};
+  $('#stSrc').onchange=fill;
+  const collect=()=>{syFromSettings();Object.assign(cfg,{anthropicKey:$('#stKey').value.trim(),model:$('#stModel').value,thinking:$('#stThink').checked,githubToken:$('#stTok').value.trim(),remember:$('#stRemember').checked});
+    const sel=$('#stSrc').value,mode=$('#stMode').value;
+    if(mode!=='none'){const x={mode,repo:$('#stRepo').value.trim(),branch:$('#stBranch').value.trim()||'main',path:$('#stPath').value.trim(),url:$('#stDataUrl').value.trim()};
+      if(sel==='__new'){x.id='s'+Date.now().toString(36);cfg.sources.push(x)}else{x.id=sel;const i=cfg.sources.findIndex(y=>y.id===sel);if(i>=0)cfg.sources[i]=x;else cfg.sources.push(x)}
+      cfg.active=x.id}
+    applySource();saveCfg()};
+  const pickMode=m=>{const d=cfg.sources.find(x=>x.mode===m);$('#stSrc').value=d?d.id:'__new';$('#stMode').value=m};
+  const doImport=async entries=>{try{st('Importing…');const n=await importToDevice(entries,st);pickMode('device');collect();st(`<span style="color:var(--green)">✔ ${n.toLocaleString()} files imported. Connecting…</span>`);setTimeout(connectFresh,600)}catch(e){st(`<span style="color:var(--red)">✖ ${esc(e.message||e)}</span>`)}};
   $('#stDevDir').onchange=e=>{const fs=[...e.target.files];if(fs.length)doImport(fs.map(f=>({path:f.webkitRelativePath||f.name,data:f})))};
   $('#stDevZip').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{st('Opening the .zip…');if(!window.JSZip)await loadScript(JSZIP_URL);const z=await JSZip.loadAsync(f);const ents=[];
     for(const zf of Object.values(z.files))if(!zf.dir)ents.push({path:zf.name,data:await zf.async('blob')});doImport(ents)}catch(err){st(`<span style="color:var(--red)">✖ ${esc(err.message||err)}</span>`)}};
-  $('#stDevClear').onclick=async()=>{await caches.delete(DEV_CACHE);if(cfg.dataMode==='device'){cfg.dataMode='none';saveCfg()}st('Imported data removed from this device.');const e=$('#stDevInfo');if(e)e.textContent='No data imported on this device.'};
-  if($('#stDemo'))$('#stDemo').onclick=()=>{$('#stMode').value='demo';collect();connectFresh()};
+  $('#stDevClear').onclick=async()=>{await caches.delete(DEV_CACHE);const was=cfg.active;cfg.sources=cfg.sources.filter(x=>x.mode!=='device');if(!activeSrc())cfg.active=(cfg.sources[0]||{}).id||'';applySource();saveCfg();if(cfg.active!==was){connectFresh();return}st('Imported data removed from this device.');const e=$('#stDevInfo');if(e)e.textContent='No data imported on this device.'};
+  if($('#stDemo'))$('#stDemo').onclick=()=>{pickMode('demo');collect();connectFresh()};
+  $('#stSrcDel').onclick=()=>{const sel=$('#stSrc').value;if(sel==='__new')return;cfg.sources=cfg.sources.filter(x=>x.id!==sel);const fc=store.get('avio_fleetcache',{});delete fc[sel];store.set('avio_fleetcache',fc);
+    if(cfg.active===sel)cfg.active=(cfg.sources[0]||{}).id||'';applySource();saveCfg();connectFresh()};
+  $('#stSrcDel').classList.toggle('hidden',$('#stSrc').value==='__new');
   if(DATA.ready&&DATA.manifest)$('#stAbout').innerHTML=`<b>Aircraft:</b> ${esc(PROFILE.aircraft)}${FLEET&&FLEET.length>1?` · ${FLEET.length} aircraft types in this data set`:''} · index built ${esc(dmyStr(DATA.manifest.built||''))}<br>${Object.entries(DATA.manifest.revisions||{}).map(([k,v])=>`${esc(k)}: ${esc(dmyStr(v))}`).join(' · ')}${(DATA.manifest.gaps||[]).length?`<br><b>Known gaps:</b> ${DATA.manifest.gaps.map(esc).join(' · ')}`:''}${OPERATOR&&OPERATOR.name?`<br><b>Operator:</b> ${esc(OPERATOR.name)}`:''}`;
   {const ab=$('#stAbout'),bd=$('#badges');if(ab&&bd&&!bd.dataset.err){const d=document.createElement('div');d.className='stbadges';d.innerHTML=bd.innerHTML;ab.prepend(d)}}
   $('#stSave').onclick=async()=>{
-    const before=srcKey();collect();
-    if(srcKey()!==before||!DATA.ready){st('Connecting…');connectFresh();return}
+    const before=cfg.active+JSON.stringify(activeSrc());collect();
+    if(cfg.active+JSON.stringify(activeSrc())!==before||!DATA.ready){st('Connecting…');connectFresh();return}
     st('Saved.');renderAiBadge();if(cfg.anthropicKey)setTimeout(hideModal,600);
   };
   $('#stOffline').onclick=async()=>{
@@ -2889,20 +2918,22 @@ $('#wGo').onclick=doWiring;$('#wQuery').addEventListener('keydown',e=>{if(e.key=
 
 /* ═════════════════ AIRCRAFT PICKER (types listed in the data set's fleet.json) ═════════════════ */
 function openFleet(){
-  if(!FLEET||FLEET.length<2)return;
+  const E=fleetEntries();if(!E.length){openSettings();return}
   const rd=k=>{try{return JSON.parse(localStorage.getItem(k)||'null')}catch(e){return null}};
-  const pfx=id=>'avio_'+(String(id).toLowerCase().replace(/[^a-z0-9]+/g,'')||'default');
-  const tailsFor=t=>{const P=pfx(t.id),set=new Map();const last=rd(P+'_lastac');if(last&&last.reg)set.set(String(last.reg).toUpperCase(),last.sn||'');
+  const tailsFor=e=>{const P=pfxFor(e.src.id,e.t.id),set=new Map();const last=rd(P+'_lastac');if(last&&last.reg)set.set(String(last.reg).toUpperCase(),last.sn||'');
     for(const c of rd(P+'_cases')||[]){const r=c&&c.form&&String(c.form.reg||'').toUpperCase();if(r&&!set.has(r))set.set(r,c.form.sn||'')}return set};
-  const go=(id,reg,sn)=>{try{localStorage.setItem('avio_ac',JSON.stringify(id));if(reg)localStorage.setItem(pfx(id)+'_lastac',JSON.stringify({reg,sn:sn||''}))}catch(e){}location.reload()};
-  const rows=FLEET.map((t,i)=>{const tl=[...tailsFor(t)];
-    return `<div class="row" data-i="${i}"><span class="ico"><span class="ms">flight</span></span><div><div class="t">${esc(t.name||t.id)}</div><div class="s">${esc(t.full||'')}${t.mode==='mel'?' · MEL only':''}${tl.length?' · '+tl.length+' tail'+(tl.length>1?'s':''):''}</div></div>${FC&&t.id===FC.id?'<span class="ms cur">check_circle</span>':''}</div>
+  const isCur=e=>e.src.id===cfg.active&&((FC&&FC.id)||null)===e.t.id;
+  const go=(e,reg,sn)=>{try{cfg.active=e.src.id;applySource();saveCfg();localStorage.setItem('avio_ac',JSON.stringify({src:e.src.id,type:e.t.id}));if(reg)localStorage.setItem(pfxFor(e.src.id,e.t.id)+'_lastac',JSON.stringify({reg,sn:sn||''}))}catch(err){}location.reload()};
+  const many=cfg.sources.length>1;
+  const rows=E.map((e,i)=>{const tl=[...tailsFor(e)];
+    return `<div class="row" data-i="${i}"><span class="ico"><span class="ms">flight</span></span><div><div class="t">${esc(e.t.name||e.t.id||'Aircraft')}</div><div class="s">${esc(e.t.full||'')}${e.t.mode==='mel'?' · MEL only':''}${many&&!e.t.pending?' · '+esc(srcLabel(e.src)):''}${tl.length?' · '+tl.length+' tail'+(tl.length>1?'s':''):''}</div></div>${isCur(e)?'<span class="ms cur">check_circle</span>':''}</div>
       ${tl.length?`<div class="tails">${tl.slice(0,12).map(([r,sn])=>`<button data-i="${i}" data-reg="${esc(r)}" data-sn="${esc(sn)}">${esc(r)}</button>`).join('')}</div>`:''}`}).join('');
-  showModal('Aircraft',`<div class="kv">Pick the aircraft type, or tap a tail number to open it with that registration filled in. Each type keeps its own cases.</div><div class="fleetlist">${rows}</div>`);
-  $$('.fleetlist .row').forEach(el=>el.onclick=()=>{const t=FLEET[+el.dataset.i];if(FC&&t.id===FC.id){hideModal();return}go(t.id)});
-  $$('.fleetlist .tails button').forEach(b=>b.onclick=()=>{const t=FLEET[+b.dataset.i];
-    if(FC&&t.id===FC.id){hideModal();const r=$('#fReg'),s=$('#fSn');if(r)r.value=b.dataset.reg;if(s&&b.dataset.sn)s.value=b.dataset.sn;return}
-    go(t.id,b.dataset.reg,b.dataset.sn)});
+  showModal('Aircraft',`<div class="kv">Pick the aircraft, or tap a tail number to open it with that registration filled in. Each aircraft type keeps its own cases.</div><div class="fleetlist">${rows}</div><button class="btn2 small" id="flManage" style="margin-top:10px">＋ Add or Manage Data Connections</button>`);
+  $$('.fleetlist .row').forEach(el=>el.onclick=()=>{const e=E[+el.dataset.i];if(isCur(e)){hideModal();return}go(e)});
+  $$('.fleetlist .tails button').forEach(btn=>btn.onclick=()=>{const e=E[+btn.dataset.i];
+    if(isCur(e)){hideModal();const r=$('#fReg'),sn=$('#fSn');if(r)r.value=btn.dataset.reg;if(sn&&btn.dataset.sn)sn.value=btn.dataset.sn;return}
+    go(e,btn.dataset.reg,btn.dataset.sn)});
+  $('#flManage').onclick=()=>{openSettings();const sel=$('#stSrc');if(sel){sel.value='__new';sel.dispatchEvent(new Event('change'))}};
 }
 $('#fleetPick').onclick=openFleet;
 
