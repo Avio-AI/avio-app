@@ -1,0 +1,15 @@
+{
+  "name": "Avio.AI",
+  "short_name": "Avio.AI",
+  "description": "Aircraft troubleshooting, MEL and wiring lookup over your organization's own maintenance data.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#131314",
+  "theme_color": "#131314",
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "icon.svg", "sizes": "any", "type": "image/svg+xml"}
+  ]
+}
