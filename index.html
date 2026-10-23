@@ -525,24 +525,25 @@ body.melonly .tab[data-tab=describe],body.melonly .tab[data-tab=search],body.mel
       </div>
 
       <div id="caseForm">
+        <div class="card hidden" id="dNoData"></div>
 
         <div class="card" id="faultCard">
-          <h3 id="faultTitle">Fault / CAS message</h3>
+          <h3 id="faultTitle">CAS / CMC Message or Fault Code</h3>
           <div class="ac">
             <input id="faultInput" placeholder="Message as it appears" autocomplete="off" autocapitalize="words" spellcheck="false">
             <div class="aclist hidden" id="faultList"></div>
           </div>
           <div class="chips" id="faultChips"></div>
-          <div class="hint" id="faultHint">Searches the fault message index in your connected data. Add every message that's showing, not just the first.</div>
+          <div class="chips" id="cmcChips"></div>
+          <div class="hint" id="faultHint">Type a CAS message, a CMC maintenance message or a fault code. Messages are matched to the message indexes and fault codes are decoded (ATA, fault number, reporting unit). Add every message that's showing, not just the first.</div>
         </div>
 
-        <div class="card" id="cmcCard">
+        <div class="card hidden" id="cmcCard"><!-- merged into the message card above; kept for its input handlers -->
           <h3>CMC maintenance message / fault code</h3>
           <div class="ac">
             <input id="cmcInput" placeholder="Code or message, e.g. 2480023SPL1" autocomplete="off" autocapitalize="characters" spellcheck="false">
             <div class="aclist hidden" id="cmcList"></div>
           </div>
-          <div class="chips" id="cmcChips"></div>
           <div class="hint">Type the fault code or the maintenance message name from the CMC. Fault codes are decoded (ATA, fault number, reporting unit) and matched to the manual pages that name the message.</div>
         </div>
         <div class="card" id="describeCard">
@@ -624,6 +625,7 @@ body.melonly .tab[data-tab=describe],body.melonly .tab[data-tab=search],body.mel
 
       <!-- WIRING LOOKUP -->
       <div id="wiringPane" class="hidden">
+        <div class="card hidden" id="wNoData"></div>
         <div class="card">
           <h3>Wiring lookup</h3>
           <div class="field"><input id="wQuery" placeholder="Designator, wire number, P/N or description" autocomplete="off" autocapitalize="characters" spellcheck="false"></div>
@@ -639,6 +641,7 @@ body.melonly .tab[data-tab=describe],body.melonly .tab[data-tab=search],body.mel
 
       <!-- DIRECT SEARCH -->
       <div id="searchPane" class="hidden">
+        <div class="card hidden" id="sNoData"></div>
         <div class="card">
           <h3>Search all manuals</h3>
           <div class="field"><input id="sQuery" placeholder="Words, part names, designators, ATA numbers…" autocomplete="off"></div>
@@ -837,18 +840,17 @@ function applyProfileUi(){
   APPNAME=PROFILE.short||'Avio.AI';SN_HINT=PROFILE.snHint||'';
   document.title=`Avio.AI · ${APPNAME}`;
   const bl=$('#brandLong'),bs=$('#brandShort');if(bl)bl.textContent=`${APPNAME}${FC&&FC.mode==='mel'?' MEL':''}`;if(bs)bs.textContent=APPNAME;
-  const ft=$('#faultTitle');if(ft&&PROFILE.faults.label)ft.textContent=PROFILE.faults.label;
   const fi=$('#faultInput');if(fi&&PROFILE.faults.placeholder)fi.placeholder=PROFILE.faults.placeholder;
-  const fh=$('#faultHint');if(fh&&PROFILE.faults.hint)fh.textContent=PROFILE.faults.hint;
   const ci=$('#cmcInput');if(ci&&PROFILE.cmc.placeholder)ci.placeholder=PROFILE.cmc.placeholder;
-  $('#cmcCard').classList.toggle('hidden',!((DATA.cmc.messages||[]).length||(DATA.cmc.codes||[]).length||PROFILE.cmc.enabled));
-  $('#faultCard').classList.toggle('hidden',!DATA.faults.length);
+
   const sn=$('#fSn');if(sn)sn.placeholder=SN_HINT;
   const sq=$('#sQuery');if(sq)sq.placeholder=`Search the ${APPNAME} manuals`;
   const wq=$('#wQuery');if(wq&&PROFILE.wiring&&PROFILE.wiring.placeholder)wq.placeholder=PROFILE.wiring.placeholder;
-  document.querySelector('.tab[data-tab=wiring]')?.classList.toggle('hidden',!DATA.manifest.wiring);
-  document.querySelector('.tab[data-tab=mel]')?.classList.toggle('hidden',!DATA.manifest.mel);
-  document.querySelector('.tab[data-tab=search]')?.classList.toggle('hidden',!DATA.catalog.length);
+  const hasManuals=DATA.catalog.some(d=>d.s!=='mel'); // pages beyond the MEL itself
+  const note=(id,show,html)=>{const e=$('#'+id);if(e){e.classList.toggle('hidden',!show);if(show)e.innerHTML=html}};
+  note('wNoData',!DATA.manifest.wiring,`<div class="hint" style="margin:0">There is no wiring pin data in the ${esc(APPNAME)} data set yet.${hasManuals?' Wiring diagram pages can be found with the Search tab.':''}</div>`);
+  note('sNoData',!hasManuals,`<div class="hint" style="margin:0">There are no manual pages in the ${esc(APPNAME)} data set yet${DATA.manifest.mel?': only the MEL is loaded, and it can be searched here':''}.</div>`);
+  note('dNoData',!hasManuals,`<div class="hint" style="margin:0">Only the MEL is loaded for the ${esc(APPNAME)}. Troubleshooting works from the MEL alone until the manuals are added to its data set.</div>`);
   const caret=$('#fleetCaret');if(caret)caret.classList.toggle('hidden',!(fleetEntries().length>1));
   if(PROFILE.disclaimer){const d=$('#mainDisclaimer');if(d)d.textContent=PROFILE.disclaimer}
 }
@@ -1900,11 +1902,25 @@ function renderFaultChips(){
 function renderAc(){
   const q=$('#faultInput').value.trim();const L=$('#faultList');
   if(!q||!DATA.ready){L.classList.add('hidden');return}
-  acItems=searchFaults(q,12);
-  L.innerHTML=acItems.map((f,i)=>`<div class="acitem${i===acIdx?' sel':''}" data-i="${i}"><div class="acmsg cas-${esc(f.color||'x')}">${esc(f.msg)}</div><div class="acmeta">${f.color?esc(f.color)+' · ':''}${f.code?esc(f.code)+' · ':''}ATA ${esc(f.ata||'?')}${f.cause||f.cite?' · '+esc(f.cause?f.cause.slice(0,90):f.cite):''}</div></div>`).join('')+
+  const F=searchFaults(q,10).map(f=>({k:'f',f}));
+  const C=searchCmc(q,8).filter(x=>!(x.kind==='code'&&F.some(y=>normMsg(y.f.code||'')===normMsg(x.code)))).map(x=>({k:'c',x}));
+  acItems=[...F,...C];
+  L.innerHTML=acItems.map((it,i)=>{const sel=i===acIdx?' sel':'';
+    if(it.k==='f'){const f=it.f;return `<div class="acitem${sel}" data-i="${i}"><div class="acmsg cas-${esc(f.color||'x')}">${esc(f.msg)}</div><div class="acmeta">${f.color?esc(f.color)+' · ':''}${f.code?esc(f.code)+' · ':''}ATA ${esc(f.ata||'?')}${f.cause||f.cite?' · '+esc(f.cause?f.cause.slice(0,90):f.cite):''}</div></div>`}
+    const x=it.x;return `<div class="acitem${sel}" data-i="${i}"><div class="acmsg">${esc(x.kind==='code'?x.code:x.msg)}</div><div class="acmeta">${esc(x.kind==='code'?`Fault code · ATA ${x.ata} · fault ${x.num} · reported by ${x.lru}${x.refs.length?'':' (decoded)'}`:`Maintenance message · reported by ${x.lru}${x.ata?' · ATA '+x.ata:''} · ${x.refs.length} reference${x.refs.length===1?'':'s'}`)}</div></div>`}).join('')+
     `<div class="acitem" data-custom="1"><div class="acmeta">Use “${esc(q)}” as typed</div></div>`;
   L.classList.remove('hidden');
-  $$('#faultList .acitem').forEach(el=>el.onmousedown=e=>{e.preventDefault();pickFault(el.dataset.custom?null:acItems[+el.dataset.i])});
+  $$('#faultList .acitem').forEach(el=>el.onmousedown=e=>{e.preventDefault();pickAc(el.dataset.custom?null:acItems[+el.dataset.i])});
+}
+function pickAc(it){
+  if(!it){const q=$('#faultInput').value.trim();if(!q)return;
+    const dec=decodeCmc(q);if(dec&&!DATA.faults.some(f=>normMsg(f.code||'')===normMsg(q))){const x=searchCmc(q,1)[0];if(x&&x.kind==='code'){pickMsgCmc(x);return}}
+    pickFault(null);return}
+  if(it.k==='f')pickFault(it.f);else pickMsgCmc(it.x);
+}
+function pickMsgCmc(x){
+  if(!selCmc.some(y=>(y.code||y.msg)===(x.code||x.msg)))selCmc.push(x);
+  $('#faultInput').value='';acIdx=-1;$('#faultList').classList.add('hidden');renderCmcChips();
 }
 function pickFault(f){
   if(!f){const q=$('#faultInput').value.trim();if(!q)return;f={msg:q,cause:'',color:'',ata:'',custom:true}}
@@ -1915,7 +1931,7 @@ $('#faultInput').addEventListener('input',()=>{acIdx=-1;renderAc()});
 $('#faultInput').addEventListener('keydown',e=>{
   if(e.key==='ArrowDown'){acIdx=Math.min(acIdx+1,acItems.length-1);renderAc();e.preventDefault()}
   else if(e.key==='ArrowUp'){acIdx=Math.max(acIdx-1,-1);renderAc();e.preventDefault()}
-  else if(e.key==='Enter'){e.preventDefault();pickFault(acIdx>=0?acItems[acIdx]:(acItems[0]||null))}
+  else if(e.key==='Enter'){e.preventDefault();pickAc(acIdx>=0?acItems[acIdx]:(acItems[0]||null))}
 });
 $('#faultInput').addEventListener('blur',()=>setTimeout(()=>$('#faultList').classList.add('hidden'),150));
 $('#cmcInput').addEventListener('input',()=>{cmcIdx=-1;renderCmcAc()});
@@ -1954,7 +1970,7 @@ $$('.tab').forEach(t=>t.onclick=()=>{
   curTab=t.dataset.tab;$$('.tab').forEach(x=>x.classList.toggle('on',x===t));
   $('#caseForm').classList.toggle('hidden',curTab==='search'||curTab==='wiring'||curTab==='mel');$('#searchPane').classList.toggle('hidden',curTab!=='search');$('#wiringPane').classList.toggle('hidden',curTab!=='wiring');$('#melPane').classList.toggle('hidden',curTab!=='mel');
   if(curTab==='mel')initMelPane();
-  const ord={describe:['#faultCard','#cmcCard','#describeCard']}[curTab];
+  const ord={describe:['#dNoData','#faultCard','#cmcCard','#describeCard']}[curTab];
   if(ord){const order=ord;const cf=$('#caseForm');for(const id of order.slice().reverse())cf.prepend($(id))}
   if(curTab==='fault')$('#faultInput').focus();
   if(curTab==='search')$('#sQuery').focus();if(curTab==='wiring')$('#wQuery').focus();
@@ -2905,7 +2921,7 @@ async function showWire(w){
   }catch(e){$('#modalBody').innerHTML=`<div class="errbox">${esc(e.message)}</div>`}
 }
 async function doWiring(){
-  const q=$('#wQuery').value.trim();if(!q||!DATA.ready)return;const mode=$('#wMode').value;
+  const q=$('#wQuery').value.trim();if(!q||!DATA.ready||!DATA.manifest.wiring)return;const mode=$('#wMode').value;
   if(mode==='pins'){showPins(q.toUpperCase());return}
   if(mode==='wire'){showWire(q.toUpperCase());return}
   $('#wResults').innerHTML='<div class="hint">Searching…</div>';
@@ -2945,7 +2961,7 @@ $('#fleetPick').onclick=openFleet;
   if(!dataConnected()){setDot('err');renderBadges('Not connected — open Settings');openSettings(null,true);return}
   await loadCore();
   if(!DATA.ready){const e=$('#badges').dataset.err;if(e)openSettings('Could not load your data: '+e);return}
-  if(FC&&FC.mode==='mel'){document.body.classList.add('melonly');const mi=$('#melInput');if(mi)mi.placeholder='Inoperative item or CAS message, e.g. Pack, Weather Radar, 21-1';const t=document.querySelector('.tab[data-tab=mel]');if(t)t.click();return}
+  if(FC&&FC.mode==='mel'){const mi=$('#melInput');if(mi)mi.placeholder='Inoperative item or CAS message, e.g. Pack, Weather Radar, 21-1';const t=document.querySelector('.tab[data-tab=mel]');if(t)t.click();return}
   const cur=store.get(PFX+'_current',null);
   if(cur){const c=loadCases().find(x=>x.id===cur);if(c){CASE=c;showChat();renderCase()}}
 })();
