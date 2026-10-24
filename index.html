@@ -744,8 +744,34 @@ function applySource(){const x=activeSrc();Object.assign(cfg,x?{dataMode:x.mode,
 applySource();
 function srcLabel(x){return x.mode==='github'?(x.repo||'GitHub repo')+(x.path?' / '+x.path:''):x.mode==='url'?String(x.url||'').replace(/^https?:\/\//,''):x.mode==='demo'?'Demo aircraft (fictional)':x.mode==='device'?'Data on this device':'Not set'}
 // aircraft in every connection, from what each connection listed the last time it was opened
+// every aircraft in every connection, sorted by the data set's own "order" (profile.order / fleet.json order), then as added
 function fleetEntries(){const fc=store.get('avio_fleetcache',{});const out=[];
-  for(const x of cfg.sources)for(const t of (fc[x.id]||[{id:null,name:srcLabel(x),full:'Not opened yet on this device',mode:'full',pending:true}]))out.push({src:x,t});return out}
+  for(const x of cfg.sources)for(const t of (fc[x.id]||[{id:null,name:srcLabel(x),full:'Not opened yet on this device',mode:'full',pending:true}]))out.push({src:x,t});
+  const ord=e=>typeof e.t.order==='number'?e.t.order:1e9;
+  return out.map((e,i)=>[e,i]).sort((a,b)=>ord(a[0])-ord(b[0])||a[1]-b[1]).map(x=>x[0])}
+// read fleet.json / profile.json of every connection (small files) so the picker knows each one's aircraft and order
+async function srcJson(x,path){
+  let res;const P=slashDir(x.path||'')+path;
+  if(x.mode==='github'){if(!x.repo||!x.token)return null;res=await fetch(`https://api.github.com/repos/${x.repo}/contents/${P}?ref=${encodeURIComponent(x.branch||'main')}`,{headers:{Authorization:`Bearer ${x.token}`,Accept:'application/vnd.github.raw','X-GitHub-Api-Version':'2022-11-28'},cache:'no-store'})}
+  else if(x.mode==='url'){if(!x.url)return null;res=await fetch(x.url.replace(/\/?$/,'/')+path,{cache:'no-store'})}
+  else if(x.mode==='demo')res=await fetch('demo/'+path,{cache:'no-store'});
+  else if(x.mode==='device'){try{const c=await caches.open(DEV_CACHE);res=await c.match(DEV_ROOT+path)}catch(e){res=null}}
+  if(!res||!res.ok)return null;try{return await res.json()}catch(e){return null}
+}
+let FLEET_INFO_P=null;
+function refreshFleetInfo(){
+  if(FLEET_INFO_P)return FLEET_INFO_P;
+  FLEET_INFO_P=(async()=>{const fc=store.get('avio_fleetcache',{});let changed=false;
+    await Promise.all(cfg.sources.map(async x=>{try{
+      let list=null;const f=await srcJson(x,'fleet.json');const fl=f?(Array.isArray(f)?f:f.types):null;
+      if(fl&&fl.length)list=fl.map(t=>({id:t.id,name:t.name||t.id,full:t.full||'',mode:t.mode||'full',...(typeof t.order==='number'?{order:t.order}:{})}));
+      else{const [m,pr]=await Promise.all([srcJson(x,'manifest.json'),srcJson(x,'profile.json')]);if(!m&&!pr)return;const P=pr||{};
+        list=[{id:null,name:P.short||(m&&m.short)||P.aircraft||(m&&m.aircraft)||srcLabel(x),full:P.aircraft||(m&&m.aircraft)||'',mode:'full',...(typeof P.order==='number'?{order:P.order}:{})}]}
+      if(JSON.stringify(fc[x.id])!==JSON.stringify(list)){fc[x.id]=list;changed=true}}catch(e){}}));
+    if(changed){store.set('avio_fleetcache',fc);const c=$('#fleetCaret');if(c)c.classList.toggle('hidden',!(fleetEntries().length>1));if(/^aircraft$/i.test($('#modalTitle').textContent||'')&&!$('#modal').classList.contains('hidden'))openFleet()}
+  })().finally(()=>{setTimeout(()=>{FLEET_INFO_P=null},60000)});
+  return FLEET_INFO_P;
+}
 function srcName(x){const ts=(store.get('avio_fleetcache',{})[x.id]||[]).map(t=>t.name).filter(Boolean);return (ts.length?ts.join(', ')+' · ':'')+srcLabel(x)}
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 // all dates: 21 OCT 2026
@@ -848,7 +874,7 @@ async function loadCore(){
     const pm=PROFILE.pagemap||DATA.manifest.pagemap;DATA.pagemap=pm?await optional(fetchData(pm)):null;DATA.docShard=new Map();
     DATA.wsys=new Map(DATA.catalog.filter(isWiring).map(d=>[wsysName(d),d]));
     DATA.ready=true; setDot('ok');renderWsetNote();
-    {const fc=store.get('avio_fleetcache',{});fc[cfg.active]=FLEET&&FLEET.length?FLEET.map(t=>({id:t.id,name:t.name||t.id,full:t.full||'',mode:t.mode||'full'})):[{id:null,name:PROFILE.short,full:PROFILE.aircraft,mode:'full'}];store.set('avio_fleetcache',fc)}
+    {const fc=store.get('avio_fleetcache',{});fc[cfg.active]=FLEET&&FLEET.length?FLEET.map(t=>({id:t.id,name:t.name||t.id,full:t.full||'',mode:t.mode||'full',...(typeof t.order==='number'?{order:t.order}:{})})):[{id:null,name:PROFILE.short,full:PROFILE.aircraft,mode:'full',...(typeof PROFILE.order==='number'?{order:PROFILE.order}:{})}];store.set('avio_fleetcache',fc)}
     applyProfileUi(); renderBadges(); fillChapterSelect();
   }catch(e){
     setDot('err'); renderBadges(e.message); console.error(e);
@@ -3328,13 +3354,14 @@ function openFleet(undo){
     go(e,btn.dataset.reg,btn.dataset.sn)});
   $('#flManage').onclick=()=>{openSettings();const sel=$('#stSrc');if(sel){sel.value='__new';sel.dispatchEvent(new Event('change'))}};
 }
-$('#fleetPick').onclick=()=>openFleet();
+$('#fleetPick').onclick=()=>{openFleet();refreshFleetInfo().catch(()=>{})};
 
 /* ═════════════════ BOOT ═════════════════ */
 (async function boot(){
   renderFaultChips();renderFollowChips();
   if(!dataConnected()){setDot('err');renderBadges('Not connected — open Settings');openSettings(null,true);return}
   await loadCore();
+  setTimeout(()=>refreshFleetInfo().catch(()=>{}),1500);
   if(!DATA.ready){const e=$('#badges').dataset.err;if(e)openSettings('Could not load your data: '+e);return}
   if(FC&&FC.mode==='mel'){const mi=$('#melInput');if(mi)mi.placeholder='Inoperative item or CAS message, e.g. Pack, Weather Radar, 21-1';const t=document.querySelector('.tab[data-tab=mel]');if(t)t.click();return}
   const cur=store.get(PFX+'_current',null);
