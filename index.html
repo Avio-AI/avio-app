@@ -1510,10 +1510,13 @@ function briefTranscript(c){
 let BRIEF_BUSY=null,BRIEF_ERR='';
 async function briefCall(c,model,maxTok){
   const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':cfg.anthropicKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body:JSON.stringify({model,max_tokens:maxTok,system:BRIEF_SYS,tools:[BRIEF_TOOL],tool_choice:{type:'tool',name:'write_brief'},
-      messages:[{role:'user',content:`Case record:\n\n${briefTranscript(c)}\n\nWrite the case brief as of ${dmyt(new Date())}.`}]})});
+    // newer models reject a forced tool choice, so the brief tool is offered and asked for; a JSON reply in text is also accepted
+    body:JSON.stringify({model,max_tokens:maxTok,system:BRIEF_SYS+'\n\nAnswer only by calling the write_brief tool once.',tools:[BRIEF_TOOL],tool_choice:{type:'auto'},
+      messages:[{role:'user',content:`Case record:\n\n${briefTranscript(c)}\n\nWrite the case brief as of ${dmyt(new Date())} by calling write_brief.`}]})});
   if(!res.ok){let m=await res.text();try{m=JSON.parse(m).error.message}catch(e){}const err=new Error(`Anthropic API ${res.status}: ${m}`);err.status=res.status;throw err}
-  const j=await res.json();const tu=(j.content||[]).find(b=>b.type==='tool_use');const x=tu&&tu.input;
+  const j=await res.json();const tu=(j.content||[]).find(b=>b.type==='tool_use'&&b.name==='write_brief');let x=tu&&tu.input;
+  if(!x){const t=(j.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n');const a=t.indexOf('{'),z=t.lastIndexOf('}');
+    if(a>=0&&z>a)try{x=JSON.parse(t.slice(a,z+1))}catch(e){}}
   if(!x||!x.headline||!x.problem||j.stop_reason==='max_tokens'){const err=new Error(j.stop_reason==='max_tokens'?'the brief was cut off (too long)':'the reply had no complete brief');err.retry=true;throw err}
   return x;
 }
@@ -1600,8 +1603,8 @@ async function openBrief(){
   const out=t=>{$('#brOut').innerHTML=t};
   // write / refresh the brief, with progress on the tapped button; false when it could not be written
   const ready=async bt=>{if(c.brief&&!briefStale(c))return true;const t=bt.innerHTML;bt.disabled=true;bt.textContent=c.brief?'Updating brief…':'Writing brief…';
-    try{await ensureBrief(c);return true}catch(e){out(`<div class="errbox">${esc(e.message||e)}</div>`);return false}finally{bt.disabled=false;bt.innerHTML=t;$('#brBody').innerHTML=body()}};
-  if($('#brUpd'))$('#brUpd').onclick=async()=>{const bt=$('#brUpd');bt.disabled=true;bt.textContent='Updating…';try{await updateBrief(c,{force:true});bt.textContent='✔ Updated'}catch(e){out(`<div class="errbox">${esc(e.message)}</div>`);bt.textContent='Update Now'}finally{bt.disabled=false;$('#brBody').innerHTML=body()}};
+    try{await ensureBrief(c);return true}catch(e){if(String(e.message||e)!==BRIEF_ERR)out(`<div class="errbox">${esc(e.message||e)}</div>`);else out('');return false}finally{bt.disabled=false;bt.innerHTML=t;$('#brBody').innerHTML=body()}};
+  if($('#brUpd'))$('#brUpd').onclick=async()=>{const bt=$('#brUpd');bt.disabled=true;bt.textContent='Updating…';try{await updateBrief(c,{force:true});bt.textContent='✔ Updated';out('')}catch(e){if(String(e.message||e)!==BRIEF_ERR)out(`<div class="errbox">${esc(e.message)}</div>`);bt.textContent='Update Now'}finally{bt.disabled=false;$('#brBody').innerHTML=body()}};
   $('#brMail').onclick=async()=>{if(await ready($('#brMail')))emailBrief(c,out)};
   $('#brCopy').onclick=async()=>{if(!await ready($('#brCopy')))return;try{await navigator.clipboard.writeText(briefText(c));$('#brCopy').textContent='✔ Copied'}catch(e){out(`<textarea rows="10" style="width:100%">${esc(briefText(c))}</textarea>`)}};
   $('#brPdf').onclick=async()=>{const bt=$('#brPdf');if(!await ready(bt))return;bt.disabled=true;bt.textContent='Creating PDF…';
