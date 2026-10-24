@@ -495,6 +495,19 @@ body.melonly .tab[data-tab=describe],body.melonly .tab[data-tab=search],body.mel
 .fleetlist .cur{margin-left:auto;color:var(--cyan)}
 .fleetlist .tails{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 8px 56px}
 .fleetlist .tails button{font-family:var(--sans);font-weight:500;font-size:13px;border:1px solid var(--border2);background:none;color:var(--text);border-radius:8px;padding:4px 10px;cursor:pointer}
+/* photos */
+.phrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.phrow:empty{display:none}
+.phwrap{position:relative}
+.phwrap img,.msg.user img.ph{width:76px;height:76px;object-fit:cover;border-radius:10px;border:1px solid var(--border);display:block;background:var(--panel);cursor:pointer}
+.msg.user img.ph{width:110px;height:110px}
+.phwrap button{position:absolute;top:-7px;right:-7px;width:24px;height:24px;border-radius:50%;border:none;background:var(--text);color:var(--bg);font-size:13px;line-height:24px;padding:0;cursor:pointer}
+.phmiss{width:110px;height:110px;border-radius:10px;border:1px dashed var(--border2);display:flex;align-items:center;justify-content:center;text-align:center;font-size:11px;color:var(--text-dim);padding:6px}
+.phbtn{display:inline-flex;align-items:center;gap:6px;margin-top:10px;cursor:pointer}
+.phbtn .ms{font-size:20px}
+.camb{background:var(--tonal);color:var(--on-tonal);border:none;border-radius:50%;width:48px;height:48px;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer}
+#chatPhotos{margin:0 0 8px}
+.phview{max-width:100%;max-height:75vh;display:block;margin:0 auto;border-radius:10px}
 </style>
 </head>
 <body>
@@ -549,6 +562,8 @@ body.melonly .tab[data-tab=describe],body.melonly .tab[data-tab=search],body.mel
         <div class="card" id="describeCard">
           <h3>What's happening?</h3>
           <textarea id="descText" rows="5" placeholder="Describe the squawk in your own words: what the crew saw, when it happened, what it did, what changed. E.g. 'Cabin altitude crept up to 9,200 ft in cruise at FL410, a pressurization caution posted briefly then cleared. Outflow valve looked full closed on the synoptic.'"></textarea>
+          <div class="phrow" id="descPhotos"></div>
+          <label class="btn2 small phbtn"><span class="ms">add_a_photo</span>Add Photo<input type="file" id="descPhotoIn" accept="image/*" multiple style="display:none"></label>
         </div>
 
         <div class="card">
@@ -663,7 +678,9 @@ body.melonly .tab[data-tab=describe],body.melonly .tab[data-tab=search],body.mel
       <div id="chatLog"></div>
       <div id="composer">
         <div class="qchips" id="followChips"></div>
+        <div class="phrow" id="chatPhotos"></div>
         <div class="crow">
+          <label class="camb" title="Add a photo"><span class="ms">add_a_photo</span><input type="file" id="chatPhotoIn" accept="image/*" multiple style="display:none"></label>
           <textarea id="chatInput" rows="1" placeholder="Report a result or ask a follow-up…"></textarea>
           <button class="send" id="btnSend"><span class="ms">arrow_upward</span></button>
         </div>
@@ -1310,6 +1327,7 @@ ${WS.length?`Wiring effectivity: the wiring data comes in packages by aircraft s
 - Clearly label anything from general experience rather than these manuals as "General knowledge (not from the manuals)".
 - Training material is not approved data: confirm its logic against the maintenance manual or system description when it matters, and flag differences.
 ${(P.rules||[]).map(r=>'- '+r).join('\n')}
+- The technician may attach photos (displays and CAS / CMC pages, components, connectors, wiring, leaks, damage). Say what you can actually see and use it as evidence; never state a part number, designator, reading or value you cannot read clearly in the photo. Ask for a closer or better-lit photo when it would decide the next step.
 - Relay WARNINGs and CAUTIONs from procedures that apply to the step you recommend (electrical power, hot parts, pressurized systems, flight controls, fuel tank CDCCL).
 - State your confidence (High / Medium / Low) in the leading hypothesis and what would raise it.
 - You are a decision aid. Return to service requires the current approved data, the required operational / functional check, and sign-off by an appropriately certificated person — say this once at conclusion, not in every reply.
@@ -1353,6 +1371,58 @@ async function callClaude(body,handlers){
   }
   return {content:blocks.filter(Boolean).map(({_k,_json,...b})=>b),stop_reason:stop,usage};
 }
+/* ═════════════════ PHOTOS ═════════════════ */
+// Photos live in this device's IndexedDB (resized JPEG, long side ≤ 1568 px). Case messages hold {type:'image', avio_photo:id};
+// they are expanded to base64 image blocks only when sent to the AI. Synced cases carry the reference, not the photo.
+const PH_DB='avio-photos',PH_MAX=1568,PH_CACHE=new Map();let _phdb=null;
+function phDb(){if(!_phdb)_phdb=new Promise((ok,no)=>{const r=indexedDB.open(PH_DB,1);r.onupgradeneeded=()=>r.result.createObjectStore('p',{keyPath:'id'});r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)}).catch(e=>{_phdb=null;throw e});return _phdb}
+async function phTx(mode,fn){const db=await phDb();return new Promise((ok,no)=>{const t=db.transaction('p',mode);const st=t.objectStore('p');const r=fn(st);t.oncomplete=()=>ok(r&&r.result);t.onerror=()=>no(t.error)})}
+const phPut=rec=>phTx('readwrite',st=>st.put(rec));
+const phDel=id=>phTx('readwrite',st=>st.delete(id)).catch(()=>{});
+async function phData(id){ // data URL, or null when the photo is not on this device
+  if(PH_CACHE.has(id))return PH_CACHE.get(id);
+  let rec=null;try{rec=await phTx('readonly',st=>st.get(id))}catch(e){}
+  if(!rec||!rec.blob)return null;
+  const url=await new Promise(ok=>{const fr=new FileReader();fr.onload=()=>ok(fr.result);fr.readAsDataURL(rec.blob)});
+  PH_CACHE.set(id,url);return url;
+}
+async function phFromFile(file){
+  let bmp;try{bmp=await createImageBitmap(file,{imageOrientation:'from-image'})}catch(e){
+    bmp=await new Promise((ok,no)=>{const im=new Image();im.onload=()=>ok(im);im.onerror=()=>no(new Error('That file could not be read as a photo.'));im.src=URL.createObjectURL(file)})}
+  const w0=bmp.width,h0=bmp.height,k=Math.min(1,PH_MAX/Math.max(w0,h0)),w=Math.round(w0*k),h=Math.round(h0*k);
+  const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(bmp,0,0,w,h);
+  const blob=await new Promise(ok=>c.toBlob(ok,'image/jpeg',.85));
+  const id='ph_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+  await phPut({id,blob,w,h,t:Date.now()});return id;
+}
+async function expandPhotos(msgs){
+  const out=[];
+  for(const m of msgs){if(m.role!=='user'||!m.content.some(b=>b.avio_photo)){out.push(m);continue}
+    const c=[];for(const b of m.content){if(!b.avio_photo){c.push(b);continue}
+      const u=await phData(b.avio_photo);
+      c.push(u?{type:'image',source:{type:'base64',media_type:'image/jpeg',data:u.slice(u.indexOf(',')+1)}}:{type:'text',text:'[A photo was attached on another device and is not available here.]'})}
+    out.push({...m,content:c})}
+  return out;
+}
+const photoIds=m=>(m.content||[]).filter(b=>b.avio_photo).map(b=>b.avio_photo);
+function phEls(ids,{remove}={}){ // thumbnails; tap to view
+  const frag=document.createDocumentFragment();
+  for(const id of ids){const w=document.createElement('div');w.className='phwrap';
+    const im=document.createElement('img');im.className='ph';im.alt='Photo';w.appendChild(im);
+    phData(id).then(u=>{if(u)im.src=u;else w.innerHTML='<div class="phmiss">Photo saved on another device</div>'});
+    im.onclick=()=>phData(id).then(u=>u&&showModal('PHOTO',`<img class="phview" src="${u}" alt="Photo">`));
+    if(remove){const x=document.createElement('button');x.type='button';x.textContent='✕';x.title='Remove';x.onclick=()=>remove(id);w.appendChild(x)}
+    frag.appendChild(w)}
+  return frag;
+}
+let PH_INTAKE=[],PH_CHAT=[];
+function renderPending(){
+  const a=$('#descPhotos');if(a){a.innerHTML='';a.appendChild(phEls(PH_INTAKE,{remove:id=>{PH_INTAKE=PH_INTAKE.filter(x=>x!==id);phDel(id);renderPending()}}))}
+  const b=$('#chatPhotos');if(b){b.innerHTML='';b.appendChild(phEls(PH_CHAT,{remove:id=>{PH_CHAT=PH_CHAT.filter(x=>x!==id);phDel(id);renderPending()}}))}
+}
+async function addPhotos(files,list){
+  for(const f of files){try{list.push(await phFromFile(f));renderPending()}catch(e){showModal('PHOTO',`<div class="errbox">${esc(e.message||e)}</div>`)}}
+}
 function withCacheBreakpoint(msgs){
   const c=JSON.parse(JSON.stringify(msgs));
   const last=c[c.length-1];
@@ -1371,7 +1441,7 @@ async function runAgent(){
   const view=newAiBubble();
   try{
     for(let iter=0;iter<16;iter++){
-      const body={model:cfg.model,max_tokens:useThinking?20000:8000,system:sys,tools,messages:withCacheBreakpoint(CASE.msgs)};
+      const body={model:cfg.model,max_tokens:useThinking?20000:8000,system:sys,tools,messages:withCacheBreakpoint(await expandPhotos(CASE.msgs))};
       if(useThinking)body.thinking={type:'enabled',budget_tokens:8000};
       let resp;
       try{resp=await callClaude(body,view.handlers())}
@@ -1496,10 +1566,12 @@ function renderCase(){
   for(const m of CASE.msgs){
     if(m.role==='user'){
       const vis=m.content.filter(b=>b.type==='text'&&!b.text.startsWith('<<CONTEXT>>')&&!b.text.startsWith('Tool budget reached'));
-      if(!vis.length)continue;aiWrap=null;
+      const ph=photoIds(m);
+      if(!vis.length&&!ph.length)continue;aiWrap=null;
       const d=document.createElement('div');d.className='msg user';
       const t=vis.map(b=>b.text).join('\n');
-      if(t.startsWith('NEW TROUBLESHOOTING CASE')){d.innerHTML=`<div class="casehdr">▸ CASE OPENED</div>${esc(t.replace(/^NEW TROUBLESHOOTING CASE\n?/,''))}`}else d.textContent=t;
+      if(t.startsWith('NEW TROUBLESHOOTING CASE')){d.innerHTML=`<div class="casehdr">▸ CASE OPENED</div>${esc(t.replace(/^NEW TROUBLESHOOTING CASE\n?/,'').replace(/\nPhotos attached: \d+$/,''))}`}else d.textContent=t;
+      if(ph.length){const r=document.createElement('div');r.className='phrow';r.appendChild(phEls(ph));d.appendChild(r)}
       log.appendChild(d);
     }else{
       if(!aiWrap){aiWrap=document.createElement('div');aiWrap.className='msg ai';log.appendChild(aiWrap)}
@@ -2048,19 +2120,20 @@ function caseText(f){
 }
 $('#btnStart').onclick=async()=>{
   const f=collectForm();
-  if(!f.faults.length&&!f.cmc.length&&!f.desc){$('#descText').focus();flash($('#btnStart'),'ENTER A MESSAGE OR DESCRIPTION');return}
+  if(!f.faults.length&&!f.cmc.length&&!f.desc&&!PH_INTAKE.length){$('#descText').focus();flash($('#btnStart'),'ENTER A MESSAGE OR DESCRIPTION');return}
   if(!DATA.ready){openSettings('Connect your data first.',!dataConnected());return}
   if(!cfg.anthropicKey){openSettings('Add your Anthropic API key to start troubleshooting.');return}
-  const text=caseText(f);
+  const text=caseText(f)+(PH_INTAKE.length?`\nPhotos attached: ${PH_INTAKE.length}`:'');
+  const photos=PH_INTAKE.map(id=>({type:'image',avio_photo:id}));PH_INTAKE=[];renderPending();
   f.faults.forEach(x=>{if(x.cite&&x.doc!=null)registerSource({cite:x.cite,doc_id:x.doc,pdf_page:x.page})});
   f.cmc.forEach(x=>(x.refs||[]).forEach(r=>registerSource({cite:r[2],doc_id:r[0],pdf_page:r[1]})));
   const title=shortTitle(f);
-  CASE={id:Date.now().toString(36),title,created:Date.now(),updated:Date.now(),form:f,usage:{in:0,out:0},msgs:[{role:'user',content:[{type:'text',text}]}]};
+  CASE={id:Date.now().toString(36),title,created:Date.now(),updated:Date.now(),form:f,usage:{in:0,out:0},msgs:[{role:'user',content:[...photos,{type:'text',text}]}]};
   {const n=$('#sessName')?$('#sessName').value.trim():'';CASE.autoTitle=CASE.title;if(n){CASE.title=n;CASE.named=true}}
   showChat();renderCase();saveCase();runAgent();
 };
 function flash(btn,msg){const o=btn.textContent;btn.textContent=msg;btn.disabled=true;setTimeout(()=>{btn.textContent=o;btn.disabled=false},1600)}
-function resetForm(){selFaults=[];renderFaultChips();selCmc=[];renderCmcChips();$('#cmcInput').value='';['#descText','#fAlt','#fSpd','#fOat','#fCabAlt','#fDp','#fRate','#fOther','#fSn','#fReg','#fApt','#fTT','#fCyc','#fEngHrs','#fEngCyc','#fApuHrs','#fRecent','#fDone','#faultInput'].forEach(i=>$(i).value='');prefillAircraft();$('#timesDetails').open=false;syncEngTimes();['#fPhase','#fBehavior','#fSide'].forEach(i=>$(i).value='');$('#readings').innerHTML='';$('#moreDetails').open=false}
+function resetForm(){PH_INTAKE.forEach(phDel);PH_INTAKE=[];renderPending();selFaults=[];renderFaultChips();selCmc=[];renderCmcChips();$('#cmcInput').value='';['#descText','#fAlt','#fSpd','#fOat','#fCabAlt','#fDp','#fRate','#fOther','#fSn','#fReg','#fApt','#fTT','#fCyc','#fEngHrs','#fEngCyc','#fApuHrs','#fRecent','#fDone','#faultInput'].forEach(i=>$(i).value='');prefillAircraft();$('#timesDetails').open=false;syncEngTimes();['#fPhase','#fBehavior','#fSide'].forEach(i=>$(i).value='');$('#readings').innerHTML='';$('#moreDetails').open=false}
 
 /* ═════════════════ CHAT ═════════════════ */
 function showChat(){$('#intakeView').classList.add('hidden');$('#chatView').classList.remove('hidden');document.body.classList.add('inchat');$$('.tab').forEach(x=>x.classList.toggle('on',x.dataset.tab==='describe'));document.body.dataset.tab='describe'}
@@ -2071,14 +2144,19 @@ function renderFollowChips(){$('#followChips').innerHTML=FOLLOW.map(t=>`<button 
 function setSendState(){const s=$('#btnSend');s.classList.toggle('stop',BUSY);s.innerHTML=BUSY?'<span class="ms fill">stop</span>':'<span class="ms">arrow_upward</span>';s.title=BUSY?'Stop':'Send'}
 function sendChat(){
   if(BUSY){ABORT?.abort();return}
-  const t=$('#chatInput').value.trim();if(!t||!CASE)return;
+  const t=$('#chatInput').value.trim();if((!t&&!PH_CHAT.length)||!CASE)return;
   $('#chatInput').value='';autoGrow();
+  const ids=PH_CHAT;PH_CHAT=[];renderPending();
+  const blocks=[...ids.map(id=>({type:'image',avio_photo:id})),{type:'text',text:t||(ids.length>1?'Photos attached.':'Photo attached.')}];
   const last=CASE.msgs[CASE.msgs.length-1];
-  if(last&&last.role==='user'){last.content.push({type:'text',text:t})}else CASE.msgs.push({role:'user',content:[{type:'text',text:t}]});
-  const d=document.createElement('div');d.className='msg user';d.textContent=t;$('#chatLog').appendChild(d);stickBottom=true;autoScroll();
+  if(last&&last.role==='user'){last.content.push(...blocks)}else CASE.msgs.push({role:'user',content:blocks});
+  const d=document.createElement('div');d.className='msg user';d.textContent=t;if(ids.length){const r=document.createElement('div');r.className='phrow';r.appendChild(phEls(ids));d.appendChild(r)}
+  $('#chatLog').appendChild(d);stickBottom=true;autoScroll();
   runAgent();
 }
 $('#btnSend').onclick=sendChat;
+$('#descPhotoIn').onchange=e=>{const fs=[...e.target.files];e.target.value='';addPhotos(fs,PH_INTAKE)};
+$('#chatPhotoIn').onchange=e=>{const fs=[...e.target.files];e.target.value='';addPhotos(fs,PH_CHAT)};
 $('#chatInput').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!/Mobi/.test(navigator.userAgent)){e.preventDefault();sendChat()}});
 function autoGrow(){const t=$('#chatInput');t.style.height='auto';t.style.height=Math.min(t.scrollHeight,160)+'px'}
 $('#chatInput').addEventListener('input',autoGrow);
@@ -2208,7 +2286,7 @@ function syRenderCases(){
     let c=loadCases().find(x=>x.id===el.dataset.id);
     if(!c){el.style.opacity=.5;try{c=await syFetch(el.dataset.id);syStoreLocal(c)}catch(e){SY.err=e.message;syStat();el.style.opacity=1;return}}
     CASE=c;try{localStorage.setItem(SY_PFX+'_current',JSON.stringify(c.id))}catch(e){}hideModal();showChat();renderCase()});
-  $$('.caselist [data-del]').forEach(b=>b.onclick=async()=>{const id=b.dataset.del;
+  $$('.caselist [data-del]').forEach(b=>b.onclick=async()=>{const id=b.dataset.del;{const c0=loadCases().find(c=>c.id===id);if(c0)(c0.msgs||[]).forEach(m=>photoIds(m).forEach(phDel))}
     const cs=loadCases().filter(c=>c.id!==id);try{localStorage.setItem(SY_PFX+'_cases',JSON.stringify(cs))}catch(e){}
     if(CASE&&CASE.id===id){CASE=null;showIntake()}
     try{await syDelete(id)}catch(e){SY.err=e.message}syRenderCases()});
@@ -2327,9 +2405,18 @@ async function buildPdf(meta){
   for(const m of CASE.msgs){
     if(m.role==='user'){
       const t=m.content.filter(b=>b.type==='text'&&!b.text.startsWith('<<CONTEXT>>')&&!b.text.startsWith('Tool budget reached')).map(b=>b.text).join('\n');
-      if(!t)continue;label('TECHNICIAN',C.teal);lastRole='user';
+      const phs=photoIds(m);
+      if(!t&&!phs.length)continue;label('TECHNICIAN',C.teal);lastRole='user';
       // aircraft details (registration, serial, times, airport) live only in the page header / details line
-      t.replace(/^NEW TROUBLESHOOTING CASE\n?/,'').split('\n').filter(ln=>!/^(Aircraft|Times|Airport): /.test(ln)).forEach(ln=>{if(!ln.trim()){y+=4;return}const b=ln.match(/^\s+•\s*(.*)/);b?para(b[1],{indent:16,bullet:'•'}):para(ln)});
+      t.replace(/^NEW TROUBLESHOOTING CASE\n?/,'').split('\n').filter(ln=>!/^(Aircraft|Times|Airport|Photos attached): /.test(ln)).forEach(ln=>{if(!ln.trim()){y+=4;return}const b=ln.match(/^\s+•\s*(.*)/);b?para(b[1],{indent:16,bullet:'•'}):para(ln)});
+      // photos, two per row
+      {let col=0,rowH=0;const GW=(CW-12)/2,MAXH=200;
+        for(const id of phs){const u=await phData(id);if(!u){para('(Photo saved on another device)',{size:8.5,color:C.dim});continue}
+          const p=doc.getImageProperties(u);const k=Math.min(GW/p.width,MAXH/p.height),w=p.width*k,h=p.height*k;
+          if(col===0){y+=6;need(h+4)}
+          doc.addImage(u,'JPEG',M+col*(GW+12),y,w,h);rowH=Math.max(rowH,h);
+          if(col===1){y+=rowH+4;col=0;rowH=0}else col=1}
+        if(col===1)y+=rowH+4}
     }else{
       const tools=m.content.filter(b=>b.type==='tool_use').map(b=>toolLabel(b));
       const txt=m.content.filter(b=>b.type==='text'&&b.text).map(b=>b.text).join('\n\n');
@@ -2368,7 +2455,7 @@ function exportMarkdown(){
   const meta=exportMeta();
   let out=`# ${APPNAME} Troubleshooting Case — ${CASE.title}\n**Registration:** ${meta.reg||'—'} · **S/N:** ${meta.sn||'—'}${meta.apt?` · **Airport:** ${meta.apt}`:''}${meta.times?`\n**Times:** ${meta.times}`:''}\nOpened ${meta.opened} · model ${cfg.model}\n\n`;
   for(const m of CASE.msgs){
-    if(m.role==='user'){const t=m.content.filter(b=>b.type==='text'&&!b.text.startsWith('<<CONTEXT>>')).map(b=>b.text).join('\n');if(t)out+=`## Technician\n${t}\n\n`}
+    if(m.role==='user'){const t=m.content.filter(b=>b.type==='text'&&!b.text.startsWith('<<CONTEXT>>')).map(b=>b.text).join('\n');const n=photoIds(m).length;if(t||n)out+=`## Technician\n${t}${n?`\n\n_${n} photo${n>1?'s':''} attached (in the PDF export)_`:''}\n\n`}
     else{const t=m.content.filter(b=>b.type==='text').map(b=>b.text).join('\n');const tools=m.content.filter(b=>b.type==='tool_use').map(b=>'- '+toolLabel(b)).join('\n');if(tools)out+=`<details><summary>Manual lookups</summary>\n\n${tools}\n\n</details>\n\n`;if(t)out+=`## Assistant\n${t}\n\n`}
   }
   out+=`---\nTroubleshooting aid output. Verify against current approved maintenance data before maintenance or return to service.\n`;
