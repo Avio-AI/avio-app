@@ -1540,12 +1540,14 @@ async function openBrief(){
   const closed=c.status==='closed';
   const body=()=>c.brief?briefHtml(c)+(briefStale(c)?'<div class="hint" style="margin-top:10px">The case has new replies since this revision; it updates automatically, or tap Update Now.</div>':''):`<div class="kv">${BRIEF_BUSY?'Writing the case brief…':cfg.anthropicKey?'No brief yet. It is written automatically after the first AI reply, or tap Update Now.':'Add your Anthropic API key in Settings to write case briefs.'}</div>`;
   showModal('CASE BRIEF',`<div id="brBody">${body()}</div>
-    <div class="grid2" style="margin-top:14px"><button class="btn" id="brPdf" ${c.brief?'':'disabled'}>Brief PDF</button><button class="btn2" id="brCopy" ${c.brief?'':'disabled'}>Copy Text</button></div>
+    <div class="grid2" style="margin-top:14px"><button class="btn" id="brMail" ${c.brief?'':'disabled'}><span class="ms" style="font-size:19px;vertical-align:-4px">mail</span> Email</button><button class="btn2" id="brPdf" ${c.brief?'':'disabled'}>Brief PDF</button></div>
+    <button class="btn2 small" id="brCopy" style="width:100%;margin-top:8px" ${c.brief?'':'disabled'}>Copy Text</button>
     <div id="brOut" style="margin-top:10px"></div>
     <div class="grid2" style="margin-top:10px">${closed?'':'<button class="btn2" id="brUpd">Update Now</button>'}<button class="btn2" id="brClose" style="${closed?'grid-column:1/-1':''}">${closed?'Reopen Case':'Close Case'}</button></div>
     <div class="hint" style="margin-top:10px">${closed?'This is the final brief. Reopening the case lets the brief update again.':'The brief stays live while the case is open: it updates after each AI reply'+(syOn()?' and syncs to every technician':'')+'. Share the PDF or text with tech ops, field service or crew; send a new copy when it changes.'}</div>`);
   const out=t=>{$('#brOut').innerHTML=t};
   if($('#brUpd'))$('#brUpd').onclick=async()=>{const bt=$('#brUpd');bt.disabled=true;bt.textContent='Updating…';try{await updateBrief(c);$('#brBody').innerHTML=body();bt.textContent='✔ Updated';$('#brPdf').disabled=$('#brCopy').disabled=!c.brief}catch(e){out(`<div class="errbox">${esc(e.message)}</div>`);bt.disabled=false;bt.textContent='Update Now'}};
+  $('#brMail').onclick=()=>emailBrief(c,out);
   $('#brCopy').onclick=async()=>{try{await navigator.clipboard.writeText(briefText(c));$('#brCopy').textContent='✔ Copied'}catch(e){out(`<textarea rows="10" style="width:100%">${esc(briefText(c))}</textarea>`)}};
   $('#brPdf').onclick=async()=>{const bt=$('#brPdf');bt.disabled=true;bt.textContent='Creating PDF…';
     try{const meta=exportMeta(),blob=await buildBriefPdf(meta,c),name=pdfName(meta).replace(/(_\d{6})?\.pdf$/,`_BRIEF_${dateCode(new Date())}.pdf`);
@@ -1559,6 +1561,32 @@ async function openBrief(){
     bt.disabled=true;bt.textContent='Closing…';
     try{if(cfg.anthropicKey&&(!c.brief||briefStale(c)))await updateBrief(c)}catch(e){}
     c.status='closed';c.closedAt=Date.now();c.closedBy=syCfg().tech||'';saveCase();renderBriefBar();openBrief()};
+}
+/* ── email the brief: a draft in the user's email app ── */
+const MAIL_KEY='avio_mail';
+function briefSubject(c){const f=c.form||{},b=c.brief;return `${[f.reg,APPNAME].filter(Boolean).join(' ')} ${c.status==='closed'?'CLOSED':'case brief'} (${c.status==='closed'?'Resolved':b.status}): ${b.headline}`.replace(/\s+/g,' ').slice(0,180)}
+function briefMailBody(c){let t=briefText(c);if(t.length>6000)t=t.slice(0,5900)+'\n…(continued in the brief PDF)';return t+'\n\n— Sent from Avio.AI'}
+function emailBrief(c,out){
+  const m=store.get(MAIL_KEY,{to:'',cc:''});
+  const canFiles=!!(navigator.canShare&&navigator.canShare({files:[new File(['x'],'x.pdf',{type:'application/pdf'})]}));
+  out(`<div class="card" style="margin:0;padding:12px">
+    <div class="field"><label>To</label><input id="mlTo" type="email" multiple value="${esc(m.to)}" placeholder="techops@your-company.com, …" autocomplete="email" autocapitalize="off"></div>
+    <div class="field"><label>Cc</label><input id="mlCc" type="email" multiple value="${esc(m.cc)}" placeholder="Optional" autocapitalize="off"></div>
+    <div class="hint" style="margin:-4px 0 10px">Recipients are remembered on this device. Subject: ${esc(briefSubject(c))}</div>
+    <button class="btn" id="mlOpen" style="width:100%">Open Draft in Email App</button>
+    ${canFiles?`<button class="btn2" id="mlPdf" style="width:100%;margin-top:8px">Email With PDF Attached</button>
+    <div class="hint" style="margin-top:6px">Opens your phone's share sheet: pick Mail, Outlook or Gmail. The PDF and text are filled in; add the recipients there.</div>`:
+    `<div class="hint" style="margin-top:6px">The draft has the brief as text. To attach the PDF, tap Brief PDF, save it, and attach it to the draft.</div>`}
+  </div>`);
+  requestAnimationFrame(()=>{$('#brOut').scrollIntoView({behavior:'smooth',block:'start'});if(!m.to)$('#mlTo').focus({preventScroll:true})});
+  const keep=()=>{const v={to:$('#mlTo').value.trim(),cc:$('#mlCc').value.trim()};store.set(MAIL_KEY,v);return v};
+  $('#mlOpen').onclick=()=>{const v=keep();const q=[v.cc&&'cc='+encodeURIComponent(v.cc),'subject='+encodeURIComponent(briefSubject(c)),'body='+encodeURIComponent(briefMailBody(c).replace(/\n/g,'\r\n'))].filter(Boolean).join('&');
+    const a=document.createElement('a');a.href=`mailto:${v.to.split(/[,;\s]+/).filter(Boolean).map(encodeURIComponent).join(',')}?${q}`;a.click()};
+  if($('#mlPdf'))$('#mlPdf').onclick=async()=>{keep();const bt=$('#mlPdf');bt.disabled=true;bt.textContent='Preparing PDF…';
+    try{const meta=exportMeta(),blob=await buildBriefPdf(meta,c),name=pdfName(meta).replace(/(_\d{6})?\.pdf$/,`_BRIEF_${dateCode(new Date())}.pdf`);
+      const file=new File([blob],name,{type:'application/pdf'});bt.disabled=false;bt.textContent='Email With PDF Attached';
+      await navigator.share({files:[file],title:briefSubject(c),text:briefMailBody(c)})}
+    catch(e){bt.disabled=false;bt.textContent='Email With PDF Attached';if(e.name!=='AbortError')$('#brOut').insertAdjacentHTML('beforeend',`<div class="errbox" style="margin-top:8px">${esc(e.message||e)}</div>`)}};
 }
 async function buildBriefPdf(meta,c){
   const {fonts}=await pdfReady();if(c.deferral)try{await loadMel()}catch(e){}
