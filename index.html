@@ -1507,31 +1507,50 @@ function briefTranscript(c){
   let t=L.join('\n\n');if(t.length>90000)t=t.slice(0,12000)+'\n\n[… middle of the case omitted …]\n\n'+t.slice(-76000);
   return t;
 }
-let BRIEF_BUSY=null;
-function updateBrief(c){
-  c=c||CASE;if(!c||!cfg.anthropicKey||c.status==='closed'||!replies(c))return Promise.resolve(null);
+let BRIEF_BUSY=null,BRIEF_ERR='';
+async function briefCall(c,model,maxTok){
+  const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':cfg.anthropicKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model,max_tokens:maxTok,system:BRIEF_SYS,tools:[BRIEF_TOOL],tool_choice:{type:'tool',name:'write_brief'},
+      messages:[{role:'user',content:`Case record:\n\n${briefTranscript(c)}\n\nWrite the case brief as of ${dmyt(new Date())}.`}]})});
+  if(!res.ok){let m=await res.text();try{m=JSON.parse(m).error.message}catch(e){}const err=new Error(`Anthropic API ${res.status}: ${m}`);err.status=res.status;throw err}
+  const j=await res.json();const tu=(j.content||[]).find(b=>b.type==='tool_use');const x=tu&&tu.input;
+  if(!x||!x.headline||!x.problem||j.stop_reason==='max_tokens'){const err=new Error(j.stop_reason==='max_tokens'?'the brief was cut off (too long)':'the reply had no complete brief');err.retry=true;throw err}
+  return x;
+}
+function updateBrief(c,{force}={}){
+  c=c||CASE;if(!c||!replies(c))return Promise.resolve(null);
+  if(!cfg.anthropicKey)return Promise.reject(new Error('Add your Anthropic API key in Settings to write case briefs.'));
+  if(c.status==='closed'&&!force)return Promise.resolve(c.brief||null);
   if(BRIEF_BUSY)return BRIEF_BUSY;
-  const id=c.id;renderBriefBar(true);
+  const id=c.id;BRIEF_ERR='';renderBriefBar(true);
   BRIEF_BUSY=(async()=>{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':cfg.anthropicKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:briefModel(),max_tokens:3000,system:BRIEF_SYS,tools:[BRIEF_TOOL],tool_choice:{type:'tool',name:'write_brief'},
-        messages:[{role:'user',content:`Case record:\n\n${briefTranscript(c)}\n\nWrite the case brief as of ${dmyt(new Date())}.`}]})});
-    if(!res.ok){let m=await res.text();try{m=JSON.parse(m).error.message}catch(e){}throw new Error(`Brief: Anthropic API ${res.status}: ${m}`)}
-    const j=await res.json();const tu=(j.content||[]).find(b=>b.type==='tool_use');if(!tu)throw new Error('Brief: no brief returned');
-    const b={...tu.input,at:Date.now(),rev:((c.brief&&c.brief.rev)||0)+1,turns:replies(c)};
-    if(CASE&&CASE.id===id){CASE.brief=b;saveCase()}else{const cs=loadCases();const x=cs.find(y=>y.id===id);if(x){x.brief=b;try{localStorage.setItem(PFX+'_cases',JSON.stringify(cs))}catch(e){}}}
+    // the brief model first; on a model / request error, the case's own model; a cut-off reply gets one retry with more room
+    const models=[...new Set([briefModel(),cfg.model])];let x=null,last=null;
+    for(const m of models){for(const tok of [8000,16000]){try{x=await briefCall(c,m,tok);break}catch(e){last=e;if(!e.retry)break}}
+      if(x||(last&&(last.status===401||last.status===429)))break}
+    if(!x)throw new Error('The case brief could not be written: '+((last&&last.message)||'unknown error'));
+    const b={...x,at:Date.now(),rev:((c.brief&&c.brief.rev)||0)+1,turns:replies(c)};
+    if(CASE&&CASE.id===id){CASE.brief=b;saveCase()}else{const cs=loadCases();const y=cs.find(z=>z.id===id);if(y){y.brief=b;try{localStorage.setItem(PFX+'_cases',JSON.stringify(cs))}catch(e){}}}
     return b;
-  })().finally(()=>{BRIEF_BUSY=null;renderBriefBar()});
+  })().catch(e=>{BRIEF_ERR=String(e.message||e);throw e}).finally(()=>{BRIEF_BUSY=null;renderBriefBar()});
   return BRIEF_BUSY;
+}
+// the brief, written or brought up to date first when needed (for PDF / email / copy at any point in the case)
+async function ensureBrief(c){
+  if(c.brief&&!briefStale(c))return c.brief;
+  if(!replies(c)){if(c.brief)return c.brief;throw new Error('The brief is written from the AI\'s replies: send the case to the AI first.')}
+  try{await updateBrief(c,{force:!c.brief})}catch(e){if(c.brief)return c.brief;throw e}
+  return c.brief;
 }
 function renderBriefBar(busy){
   const el=$('#briefBar');if(!el)return;const c=CASE;
   const comp=$('#composer');if(comp)comp.classList.toggle('closedcase',!!(c&&c.status==='closed'));
   const ci=$('#chatInput');if(ci)ci.placeholder=c&&c.status==='closed'?'Case closed — reopen it from the Case Brief to continue':'Report a result or ask a follow-up…';
-  if(!c||(!c.brief&&!busy&&!BRIEF_BUSY)){el.classList.add('hidden');return}
+  if(!c||(!c.brief&&!busy&&!BRIEF_BUSY&&!(BRIEF_ERR&&replies(c)))){el.classList.add('hidden');return}
   el.classList.remove('hidden');el.classList.toggle('closed',c.status==='closed');
   const b=c.brief;const st=c.status==='closed'?'Closed':(b&&b.status)||'Troubleshooting';
-  el.innerHTML=`<span class="ms">summarize</span><div class="bt"><div class="bh">${esc(b?b.headline:'Writing the case brief…')}</div><div class="bs">Case Brief · ${esc(st)}${b?` · ${(busy||BRIEF_BUSY)?'updating…':'updated '+esc(dmyt(b.at))}`:''}</div></div><span class="ms">chevron_right</span>`;
+  const wr=busy||BRIEF_BUSY;
+  el.innerHTML=`<span class="ms">${!wr&&BRIEF_ERR?'error':'summarize'}</span><div class="bt"><div class="bh">${esc(b?b.headline:wr?'Writing the case brief…':'Case brief not written yet — tap to retry')}</div><div class="bs">Case Brief · ${esc(st)}${wr?' · updating…':BRIEF_ERR?' · last update failed, tap for details':b?' · updated '+esc(dmyt(b.at)):''}</div></div><span class="ms">chevron_right</span>`;
   el.onclick=()=>openBrief();
 }
 const BL=(t,arr,ordered)=>arr&&arr.length?`<h4>${t}</h4><${ordered?'ol':'ul'}>${arr.map(x=>`<li>${esc(x)}</li>`).join('')}</${ordered?'ol':'ul'}>`:'';
@@ -1569,18 +1588,23 @@ function briefText(c){
 async function openBrief(){
   const c=CASE;if(!c)return;if(c.deferral)try{await loadMel()}catch(e){}
   const closed=c.status==='closed';
-  const body=()=>c.brief?briefHtml(c)+(briefStale(c)?'<div class="hint" style="margin-top:10px">The case has new replies since this revision; it updates automatically, or tap Update Now.</div>':''):`<div class="kv">${BRIEF_BUSY?'Writing the case brief…':cfg.anthropicKey?'No brief yet. It is written automatically after the first AI reply, or tap Update Now.':'Add your Anthropic API key in Settings to write case briefs.'}</div>`;
+  const errBox=()=>BRIEF_ERR?`<div class="errbox" style="margin-bottom:10px">${esc(BRIEF_ERR)}</div>`:'';
+  const body=()=>errBox()+(c.brief?briefHtml(c)+(briefStale(c)?'<div class="hint" style="margin-top:10px">The case has new replies since this revision. Brief PDF, Email and Copy bring it up to date first.</div>':''):`<div class="kv">${BRIEF_BUSY?'Writing the case brief…':!cfg.anthropicKey?'Add your Anthropic API key in Settings to write case briefs.':replies(c)?'No brief yet. Tap Brief PDF, Email or Update Now to write it.':'The brief is written from the AI\'s replies: send the case to the AI first.'}</div>`);
+  const can=!!(c.brief||replies(c));
   showModal('CASE BRIEF',`<div id="brBody">${body()}</div>
-    <div class="grid2" style="margin-top:14px"><button class="btn" id="brMail" ${c.brief?'':'disabled'}><span class="ms" style="font-size:19px;vertical-align:-4px">mail</span> Email</button><button class="btn2" id="brPdf" ${c.brief?'':'disabled'}>Brief PDF</button></div>
-    <button class="btn2 small" id="brCopy" style="width:100%;margin-top:8px" ${c.brief?'':'disabled'}>Copy Text</button>
+    <div class="grid2" style="margin-top:14px"><button class="btn" id="brMail" ${can?'':'disabled'}><span class="ms" style="font-size:19px;vertical-align:-4px">mail</span> Email</button><button class="btn2" id="brPdf" ${can?'':'disabled'}>Brief PDF</button></div>
+    <button class="btn2 small" id="brCopy" style="width:100%;margin-top:8px" ${can?'':'disabled'}>Copy Text</button>
     <div id="brOut" style="margin-top:10px"></div>
     <div class="grid2" style="margin-top:10px">${closed?'':'<button class="btn2" id="brUpd">Update Now</button>'}<button class="btn2" id="brClose" style="${closed?'grid-column:1/-1':''}">${closed?'Reopen Case':'Close Case'}</button></div>
     <div class="hint" style="margin-top:10px">${closed?'This is the final brief. Reopening the case lets the brief update again.':'The brief stays live while the case is open: it updates after each AI reply'+(syOn()?' and syncs to every technician':'')+'. Share the PDF or text with tech ops, field service or crew; send a new copy when it changes.'}</div>`);
   const out=t=>{$('#brOut').innerHTML=t};
-  if($('#brUpd'))$('#brUpd').onclick=async()=>{const bt=$('#brUpd');bt.disabled=true;bt.textContent='Updating…';try{await updateBrief(c);$('#brBody').innerHTML=body();bt.textContent='✔ Updated';$('#brPdf').disabled=$('#brCopy').disabled=!c.brief}catch(e){out(`<div class="errbox">${esc(e.message)}</div>`);bt.disabled=false;bt.textContent='Update Now'}};
-  $('#brMail').onclick=()=>emailBrief(c,out);
-  $('#brCopy').onclick=async()=>{try{await navigator.clipboard.writeText(briefText(c));$('#brCopy').textContent='✔ Copied'}catch(e){out(`<textarea rows="10" style="width:100%">${esc(briefText(c))}</textarea>`)}};
-  $('#brPdf').onclick=async()=>{const bt=$('#brPdf');bt.disabled=true;bt.textContent='Creating PDF…';
+  // write / refresh the brief, with progress on the tapped button; false when it could not be written
+  const ready=async bt=>{if(c.brief&&!briefStale(c))return true;const t=bt.innerHTML;bt.disabled=true;bt.textContent=c.brief?'Updating brief…':'Writing brief…';
+    try{await ensureBrief(c);return true}catch(e){out(`<div class="errbox">${esc(e.message||e)}</div>`);return false}finally{bt.disabled=false;bt.innerHTML=t;$('#brBody').innerHTML=body()}};
+  if($('#brUpd'))$('#brUpd').onclick=async()=>{const bt=$('#brUpd');bt.disabled=true;bt.textContent='Updating…';try{await updateBrief(c,{force:true});bt.textContent='✔ Updated'}catch(e){out(`<div class="errbox">${esc(e.message)}</div>`);bt.textContent='Update Now'}finally{bt.disabled=false;$('#brBody').innerHTML=body()}};
+  $('#brMail').onclick=async()=>{if(await ready($('#brMail')))emailBrief(c,out)};
+  $('#brCopy').onclick=async()=>{if(!await ready($('#brCopy')))return;try{await navigator.clipboard.writeText(briefText(c));$('#brCopy').textContent='✔ Copied'}catch(e){out(`<textarea rows="10" style="width:100%">${esc(briefText(c))}</textarea>`)}};
+  $('#brPdf').onclick=async()=>{const bt=$('#brPdf');if(!await ready(bt))return;bt.disabled=true;bt.textContent='Creating PDF…';
     try{const meta=exportMeta(),blob=await buildBriefPdf(meta,c),name=pdfName(meta).replace(/(_\d{6})?\.pdf$/,`_BRIEF_${dateCode(new Date())}.pdf`);
       const file=new File([blob],name,{type:'application/pdf'}),url=URL.createObjectURL(blob);bt.textContent='✔ PDF ready';bt.disabled=false;
       const canShare=!!(navigator.canShare&&navigator.canShare({files:[file]}));
@@ -1590,7 +1614,7 @@ async function openBrief(){
   $('#brClose').onclick=async()=>{const bt=$('#brClose');
     if(closed){c.status='open';delete c.closedAt;delete c.closedBy;saveCase();renderBriefBar();openBrief();return}
     bt.disabled=true;bt.textContent='Closing…';
-    try{if(cfg.anthropicKey&&(!c.brief||briefStale(c)))await updateBrief(c)}catch(e){}
+    try{if(cfg.anthropicKey&&replies(c)&&(!c.brief||briefStale(c)))await updateBrief(c,{force:true})}catch(e){}
     c.status='closed';c.closedAt=Date.now();c.closedBy=syCfg().tech||'';saveCase();renderBriefBar();openBrief()};
 }
 /* ── email the brief: a draft in the user's email app ── */
@@ -1613,11 +1637,13 @@ function emailBrief(c,out){
   const keep=()=>{const v={to:$('#mlTo').value.trim(),cc:$('#mlCc').value.trim()};store.set(MAIL_KEY,v);return v};
   $('#mlOpen').onclick=()=>{const v=keep();const q=[v.cc&&'cc='+encodeURIComponent(v.cc),'subject='+encodeURIComponent(briefSubject(c)),'body='+encodeURIComponent(briefMailBody(c).replace(/\n/g,'\r\n'))].filter(Boolean).join('&');
     const a=document.createElement('a');a.href=`mailto:${v.to.split(/[,;\s]+/).filter(Boolean).map(encodeURIComponent).join(',')}?${q}`;a.click()};
-  if($('#mlPdf'))$('#mlPdf').onclick=async()=>{keep();const bt=$('#mlPdf');bt.disabled=true;bt.textContent='Preparing PDF…';
+  let mailFile=null;
+  if($('#mlPdf'))$('#mlPdf').onclick=async()=>{keep();const bt=$('#mlPdf');
+    if(mailFile){try{await navigator.share({files:[mailFile],title:briefSubject(c),text:briefMailBody(c)})}catch(e){if(e.name!=='AbortError')bt.insertAdjacentHTML('afterend',`<div class="errbox" style="margin-top:8px">${esc(e.message||e)}</div>`)}return}
+    bt.disabled=true;bt.textContent='Preparing PDF…';
     try{const meta=exportMeta(),blob=await buildBriefPdf(meta,c),name=pdfName(meta).replace(/(_\d{6})?\.pdf$/,`_BRIEF_${dateCode(new Date())}.pdf`);
-      const file=new File([blob],name,{type:'application/pdf'});bt.disabled=false;bt.textContent='Email With PDF Attached';
-      await navigator.share({files:[file],title:briefSubject(c),text:briefMailBody(c)})}
-    catch(e){bt.disabled=false;bt.textContent='Email With PDF Attached';if(e.name!=='AbortError')$('#brOut').insertAdjacentHTML('beforeend',`<div class="errbox" style="margin-top:8px">${esc(e.message||e)}</div>`)}};
+      mailFile=new File([blob],name,{type:'application/pdf'});bt.disabled=false;bt.innerHTML='<span class="ms" style="font-size:19px;vertical-align:-4px">send</span> Send Email With PDF';bt.classList.replace('btn2','btn')}
+    catch(e){bt.disabled=false;bt.textContent='Email With PDF Attached';bt.insertAdjacentHTML('afterend',`<div class="errbox" style="margin-top:8px">${esc(e.message||e)}</div>`)}};
 }
 async function buildBriefPdf(meta,c){
   const {fonts}=await pdfReady();if(c.deferral)try{await loadMel()}catch(e){}
