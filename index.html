@@ -36,6 +36,14 @@ label{font-family:var(--mono);font-size:12px;letter-spacing:1px;color:var(--text
 .hidden{display:none!important}
 .synclbl{display:flex!important;gap:8px;align-items:center;text-transform:none!important;letter-spacing:0!important;font-family:var(--sans)!important;font-size:14px!important;color:var(--text)!important;cursor:pointer}
 .synclbl input{width:auto;transform:scale(1.15)}
+.tgrid{display:grid;grid-template-columns:minmax(92px,auto) 1fr 1fr;gap:8px 10px;align-items:center;margin:4px 0 10px}
+.tgrid .th{font-size:12px;color:var(--text-dim);font-weight:500;padding-left:4px}
+.tgrid .tl{font-size:14px;color:var(--text);font-weight:500;line-height:1.2}
+.tgrid .tl small{display:block;font-size:11.5px;color:var(--text-dim);font-weight:400}
+.tgrid input{min-width:0}
+.tgrid .tsync{grid-column:2/-1;justify-self:start;display:inline-flex;align-items:center;gap:6px}
+.tgrid .tsync .ms{font-size:18px}
+.tgrid .tsync[aria-pressed="true"]{background:var(--cyan);color:var(--on-accent);border-color:var(--cyan)}
 input[readonly]{opacity:.65}
 #fReg,#fApt,#exReg,#amReg,#amDefLoc,#amSigLoc{text-transform:uppercase}
 
@@ -616,16 +624,9 @@ body.melonly .tab[data-tab=describe],body.melonly .tab[data-tab=search],body.mel
             <div class="field"><label>Cabin rate (fpm)</label><input id="fRate" inputmode="numeric" placeholder="+300"></div>
           </div>
           <details class="more" id="timesDetails">
-            <summary>▸ Aircraft &amp; Engine Times (Optional)</summary>
-            <div class="grid2">
-              <div class="field"><label>Aircraft total time</label><input id="fTT" inputmode="decimal" placeholder="hrs, e.g. 4,312.6"></div>
-              <div class="field"><label>Aircraft cycles</label><input id="fCyc" inputmode="numeric" placeholder="e.g. 2,145"></div>
-              <div class="field" style="grid-column:1/-1;margin:-2px 0 8px"><label class="synclbl"><input type="checkbox" id="fSyncEng"> Engine hours &amp; cycles same as aircraft</label></div>
-              <div class="field"><label>Engine hours</label><input id="fEngHrs" placeholder="e.g. L 4,301 / R 4,298"></div>
-              <div class="field"><label>Engine cycles</label><input id="fEngCyc" placeholder="e.g. L 2,140 / R 2,139"></div>
-              <div class="field"><label>APU hours</label><input id="fApuHrs" inputmode="decimal" placeholder="e.g. 1,877"></div>
-            </div>
-            <div class="hint" style="margin:-4px 0 6px">Any times entered are added to the PDF header.</div>
+            <summary>▸ Aircraft, Engine &amp; APU Times (Optional)</summary>
+            <div id="fTimes"></div>
+            <div class="hint" style="margin:-4px 0 6px">Times entered are added to the PDF header. They can also be added or changed later in Export Case.</div>
           </details>
           <details class="more" id="moreDetails">
             <summary>▸ Observed Readings, Other Messages, History</summary>
@@ -1604,6 +1605,7 @@ function briefHtml(c){
 function briefText(c){
   const b=c.brief,f=c.form||{},closed=c.status==='closed',L=[];
   L.push(`CASE BRIEF — ${[APPNAME,f.reg,f.sn&&'S/N '+f.sn].filter(Boolean).join(' · ')}`);
+  {const tl=timesLine(f);if(tl)L.push('Times: '+tl)}
   L.push(`${closed?'CLOSED '+dmy(c.closedAt):'OPEN'} · revision ${b.rev} · as of ${dmyt(b.at)}`,'',b.headline,'Status: '+(closed?'Closed':b.status),'','PROBLEM',b.problem);
   const sec=(t,a,o)=>{if(a&&a.length){L.push('',t);a.forEach((x,i)=>L.push(`${o?(i+1)+'.':'-'} ${x}`))}};
   sec('MESSAGES',b.messages);sec('WORK DONE SO FAR',b.work_done,1);sec('FINDINGS',b.findings);
@@ -1686,7 +1688,7 @@ async function buildBriefPdf(meta,c){
   function header(){font('bold',9,C.amber);doc.text(pclean(`${APPNAME} CASE BRIEF`),M,30);
     font('bold',9,closed?C.dim:C.teal);doc.text(closed?'CLOSED':'OPEN · LIVE',W/2,30,{align:'center'});
     font('bold',11,C.ink);doc.text(pclean(`${meta.reg||'Reg —'}   ·   S/N ${meta.sn||'—'}`),W-M,30,{align:'right'});
-    if(meta.times){font('normal',8.5,C.dim);doc.text(pclean(meta.times),W-M,44,{align:'right'})}
+    if(meta.times)pdfTimes(doc,font,C,meta.times,W,M);
     doc.setDrawColor(...C.rule);doc.setLineWidth(.8);doc.line(M,hdrH-8,W-M,hdrH-8);y=hdrH+10}
   const need=h=>{if(y+h>H-56){doc.addPage();header()}};
   function para(t,{size=10,color=C.ink,bold=false,indent=0,bullet=null}={}){
@@ -2367,16 +2369,35 @@ $('#cmcInput').addEventListener('keydown',e=>{
 $('#cmcInput').addEventListener('blur',()=>setTimeout(()=>$('#cmcList').classList.add('hidden'),150));
 
 
-/* ── engine times mirror aircraft times when the box is ticked (setting remembered on this device) ── */
-const SYNC_KEY=PFX+'_synceng';
-function syncEngTimes(){
-  const on=$('#fSyncEng').checked;
-  for(const [src,dst] of [['#fTT','#fEngHrs'],['#fCyc','#fEngCyc']]){const d=$(dst);d.readOnly=on;if(on)d.value=$(src).value}
+/* ── airframe, engine 1, engine 2 and APU times: one block, used on the Describe form and in Export Case ──
+   The sync button copies the airframe hours / cycles to both engines and keeps them in step while it is on. */
+const TIMES_KEYS=['tt','cyc','e1Hrs','e1Cyc','e2Hrs','e2Cyc','apuHrs'];
+const SYNC_KEY=PFX+'_synceng'; // last sync choice on this device, the default for a new case
+const T_IDS={tt:'TT',cyc:'Cyc',e1Hrs:'E1Hrs',e1Cyc:'E1Cyc',e2Hrs:'E2Hrs',e2Cyc:'E2Cyc',apuHrs:'ApuHrs'};
+function timesHtml(p,f){f=f||{};const inp=(k,ph,mode,lbl)=>`<input id="${p}${T_IDS[k]}" inputmode="${mode}" placeholder="${ph}" aria-label="${lbl}" value="${esc(f[k]||'')}" autocomplete="off">`;
+  return `<div class="tgrid" id="${p}TGrid">
+    <span></span><span class="th">Hours</span><span class="th">Cycles</span>
+    <span class="tl">Airframe</span>${inp('tt','4,312.6','decimal','Airframe hours')}${inp('cyc','2,145','numeric','Airframe cycles')}
+    <button type="button" class="btn2 small tsync" id="${p}Sync" aria-pressed="false"><span class="ms">sync</span>Engines Match Airframe</button>
+    <span class="tl">Engine 1<small>Left</small></span>${inp('e1Hrs','4,301.2','decimal','Engine 1 hours')}${inp('e1Cyc','2,140','numeric','Engine 1 cycles')}
+    <span class="tl">Engine 2<small>Right</small></span>${inp('e2Hrs','4,298.0','decimal','Engine 2 hours')}${inp('e2Cyc','2,139','numeric','Engine 2 cycles')}
+    <span class="tl">APU</span>${inp('apuHrs','1,877','decimal','APU hours')}<span></span>
+  </div>`}
+function timesMatch(f){return !!(f&&(f.tt||f.cyc)&&f.e1Hrs===f.tt&&f.e2Hrs===f.tt&&f.e1Cyc===f.cyc&&f.e2Cyc===f.cyc)}
+function wireTimes(p,f,onChange){
+  const $i=k=>$('#'+p+T_IDS[k]),btn=$('#'+p+'Sync');
+  let on=f&&f.engSync!=null?!!f.engSync:(f&&TIMES_KEYS.some(k=>f[k])?timesMatch(f):!!store.get(SYNC_KEY,false));
+  const apply=()=>{btn.setAttribute('aria-pressed',on);btn.title=on?'Engine times follow the airframe. Tap to enter them separately.':'Copy the airframe hours and cycles to both engines';
+    for(const [src,dst] of [['tt','e1Hrs'],['tt','e2Hrs'],['cyc','e1Cyc'],['cyc','e2Cyc']]){const d=$i(dst);d.readOnly=on;if(on)d.value=$i(src).value}};
+  btn.onclick=()=>{on=!on;store.set(SYNC_KEY,on);apply();onChange&&onChange()};
+  ['tt','cyc'].forEach(k=>$i(k).addEventListener('input',apply));
+  TIMES_KEYS.forEach(k=>$i(k).addEventListener('change',()=>onChange&&onChange()));
+  apply();
+  return {read:()=>{const o={engSync:on};TIMES_KEYS.forEach(k=>o[k]=$i(k).value.trim());return o},isOn:()=>on};
 }
-$('#fSyncEng').checked=!!store.get(SYNC_KEY,false);
-$('#fSyncEng').addEventListener('change',()=>{store.set(SYNC_KEY,$('#fSyncEng').checked);if(!$('#fSyncEng').checked){$('#fEngHrs').value='';$('#fEngCyc').value=''}syncEngTimes()});
-['#fTT','#fCyc'].forEach(id=>$(id).addEventListener('input',syncEngTimes));
-syncEngTimes();
+let FT=null;
+function renderFormTimes(f){$('#fTimes').innerHTML=timesHtml('f',f);FT=wireTimes('f',f||null)}
+renderFormTimes(null);
 
 const READING_PRESETS=[['Duct / mix temp','°C'],['Bleed press','psi'],['Bleed temp','°C'],['Pack outlet temp','°C'],['Hyd press','psi'],['Oil press','psi'],['Oil temp','°C'],['Fuel temp','°C'],['N1','%'],['N2','%'],['TGT','°C'],['DC bus','V'],['AC bus','V'],['Gen load','A'],['Brake temp','°C'],['Tire press','psi']];
 function addReading(p='',v='',u=''){
@@ -2401,7 +2422,7 @@ $$('.tab').forEach(t=>t.onclick=()=>{
 });
 const val=id=>$(id).value.trim();
 function collectForm(){
-  return {faults:selFaults,cmc:selCmc.slice(),desc:val('#descText'),phase:val('#fPhase'),behavior:val('#fBehavior'),alt:val('#fAlt'),spd:val('#fSpd'),oat:val('#fOat'),cabAlt:val('#fCabAlt'),dp:val('#fDp'),rate:val('#fRate'),other:val('#fOther'),sn:val('#fSn'),reg:val('#fReg').toUpperCase(),apt:val('#fApt').toUpperCase(),tt:val('#fTT'),cyc:val('#fCyc'),engHrs:val('#fEngHrs'),engCyc:val('#fEngCyc'),apuHrs:val('#fApuHrs'),side:val('#fSide'),recent:val('#fRecent'),done:val('#fDone'),
+  return {faults:selFaults,cmc:selCmc.slice(),desc:val('#descText'),phase:val('#fPhase'),behavior:val('#fBehavior'),alt:val('#fAlt'),spd:val('#fSpd'),oat:val('#fOat'),cabAlt:val('#fCabAlt'),dp:val('#fDp'),rate:val('#fRate'),other:val('#fOther'),sn:val('#fSn'),reg:val('#fReg').toUpperCase(),apt:val('#fApt').toUpperCase(),...FT.read(),side:val('#fSide'),recent:val('#fRecent'),done:val('#fDone'),
     readings:$$('#readings .rrow').map(r=>[...r.querySelectorAll('input')].map(i=>i.value.trim())).filter(r=>r[0]||r[1])};
 }
 function caseText(f){
@@ -2435,7 +2456,7 @@ $('#btnStart').onclick=async()=>{
   showChat();renderCase();saveCase();runAgent();
 };
 function flash(btn,msg){const o=btn.textContent;btn.textContent=msg;btn.disabled=true;setTimeout(()=>{btn.textContent=o;btn.disabled=false},1600)}
-function resetForm(){PH_INTAKE.forEach(phDel);PH_INTAKE=[];renderPending();selFaults=[];renderFaultChips();selCmc=[];renderCmcChips();$('#cmcInput').value='';['#descText','#fAlt','#fSpd','#fOat','#fCabAlt','#fDp','#fRate','#fOther','#fSn','#fReg','#fApt','#fTT','#fCyc','#fEngHrs','#fEngCyc','#fApuHrs','#fRecent','#fDone','#faultInput'].forEach(i=>$(i).value='');prefillAircraft();$('#timesDetails').open=false;syncEngTimes();['#fPhase','#fBehavior','#fSide'].forEach(i=>$(i).value='');$('#readings').innerHTML='';$('#moreDetails').open=false}
+function resetForm(){PH_INTAKE.forEach(phDel);PH_INTAKE=[];renderPending();selFaults=[];renderFaultChips();selCmc=[];renderCmcChips();$('#cmcInput').value='';['#descText','#fAlt','#fSpd','#fOat','#fCabAlt','#fDp','#fRate','#fOther','#fSn','#fReg','#fApt','#fRecent','#fDone','#faultInput'].forEach(i=>$(i).value='');prefillAircraft();$('#timesDetails').open=false;renderFormTimes(null);['#fPhase','#fBehavior','#fSide'].forEach(i=>$(i).value='');$('#readings').innerHTML='';$('#moreDetails').open=false}
 
 /* ═════════════════ CHAT ═════════════════ */
 function showChat(){$('#intakeView').classList.add('hidden');$('#chatView').classList.remove('hidden');document.body.classList.add('inchat');$$('.tab').forEach(x=>x.classList.toggle('on',x.dataset.tab==='describe'));document.body.dataset.tab='describe'}
@@ -2635,9 +2656,17 @@ function pdfReady(){
 const PDF_SUBS=[[/Δ/g,'Delta '],[/[▸►▶]/g,'>'],[/[◆◇◈]/g,'-'],[/→/g,'->'],[/←/g,'<-'],[/[✔✓]/g,'OK'],[/[✖✗✕]/g,'X'],[/≈/g,'~'],[/ /g,' '],[/[​-‏️]/g,''],[/[^\u0009\u000a -ſ–—‘’“”•…°±×≤≥≠™]/g,'']];
 const pclean=s=>PDF_SUBS.reduce((a,[r,b])=>a.replace(r,b),String(s??''));
 function timesLine(f){
-  const t=[[f.tt,'A/C TT','hrs'],[f.cyc,'A/C Cycles',''],[f.engHrs,'Eng Hrs',''],[f.engCyc,'Eng Cycles',''],[f.apuHrs,'APU Hrs','']].filter(x=>x[0]);
-  return t.map(([v,l,u])=>`${l} ${v}${u&&/^[\d.,]+$/.test(v)?' '+u:''}`).join('   ·   ');
+  f=f||{};const num=v=>/^[\d.,]+$/.test(v||'');
+  const hc=(h,c)=>[h&&h+(num(h)?' hrs':''),c&&c+(num(c)?' cyc':'')].filter(Boolean).join(' / ');
+  const P=[],a=hc(f.tt,f.cyc),e1=hc(f.e1Hrs,f.e1Cyc),e2=hc(f.e2Hrs,f.e2Cyc);
+  if(a)P.push('A/C '+a);
+  if(e1&&e1===e2)P.push('Eng 1 & 2 '+e1);else{if(e1)P.push('Eng 1 '+e1);if(e2)P.push('Eng 2 '+e2)}
+  if(!e1&&!e2){if(f.engHrs)P.push('Eng Hrs '+f.engHrs);if(f.engCyc)P.push('Eng Cycles '+f.engCyc)} // cases saved before separate engine fields
+  if(f.apuHrs)P.push('APU '+hc(f.apuHrs,''));
+  return P.join('   ·   ');
 }
+// the times line in a PDF header, made smaller when it would not fit on one line
+function pdfTimes(doc,font,C,text,W,M){let sz=8.5;font('normal',sz,C.dim);const t=pclean(text);while(sz>6&&doc.getTextWidth(t)>W-2*M){sz-=.5;font('normal',sz,C.dim)}doc.text(t,W-M,44,{align:'right'})}
 async function buildPdf(meta){
   const {fonts}=await pdfReady();
   const {jsPDF}=window.jspdf;const doc=new jsPDF({unit:'pt',format:'letter'});
@@ -2651,7 +2680,7 @@ async function buildPdf(meta){
     font('bold',9,C.amber);doc.text(pclean(`${APPNAME} TROUBLESHOOTING REPORT`),M,30);
     font('bold',9,C.ink);doc.text('FOR REFERENCE ONLY',W/2,30,{align:'center'});
     font('bold',11,C.ink);const id=pclean(`${meta.reg||'Reg —'}   ·   S/N ${meta.sn||'—'}`);doc.text(id,W-M,30,{align:'right'});
-    if(meta.times){font('normal',8.5,C.dim);doc.text(pclean(meta.times),W-M,44,{align:'right'})}
+    if(meta.times)pdfTimes(doc,font,C,meta.times,W,M);
     doc.setDrawColor(...C.rule);doc.setLineWidth(.8);doc.line(M,hdrH-8,W-M,hdrH-8);
     y=hdrH+10;
   }
@@ -2777,14 +2806,19 @@ $('#btnExport').onclick=()=>{
   const f=CASE.form=CASE.form||{};
   showModal('EXPORT CASE',`<div class="kv"><b>${esc(CASE.title)}</b><br>${CASE.msgs.filter(m=>m.role==='assistant').length} replies · opened ${esc(dmyt(CASE.created))}</div>
     <div class="grid2"><div class="field"><label>Registration</label><input id="exReg" value="${esc(f.reg||'')}" placeholder="N1KE" autocapitalize="characters" autocomplete="off"></div><div class="field"><label>Serial number</label><input id="exSn" value="${esc(f.sn||'')}" placeholder="${esc(SN_HINT)}" autocomplete="off"></div></div>
-    <div class="hint" id="exTimes" style="margin:-4px 0 12px">${esc(timesLine(f)||'No aircraft / engine times entered for this case.')}</div>
+    <details class="more" id="exTimesBox" style="margin:-2px 0 12px"${TIMES_KEYS.some(k=>f[k])?'':' open'}><summary>▸ Aircraft, Engine &amp; APU Times</summary>
+      <div class="kv" id="exTimes" style="margin:4px 0 6px">${esc(timesLine(f)||'Not entered yet. Add them here to put them on the PDF.')}</div>
+      ${timesHtml('ex',f)}
+    </details>
     <button class="btn" id="exBrief" style="margin-bottom:10px">Case Brief (Short Summary)</button>
     <button class="btn2" id="exPdf" style="width:100%">Full Report PDF</button>
     <div id="exOut" style="margin-top:12px"></div>
     <button class="btn2" id="exMd" style="width:100%;margin-top:12px">Download Markdown (.md)</button>
     ${melOps().amdl?`<button class="btn2" id="exAmdl" style="width:100%;margin-top:12px">${esc(formTitle())} (${CASE.clearing?'Completed':CASE.deferral?'MEL Deferral':'Discrepancy'})</button>`:''}`);
   if($('#exAmdl'))$('#exAmdl').onclick=async()=>{sync();if(CASE.deferral)try{await loadMel()}catch(e){}openCaseAmdl()};
-  const sync=()=>{f.reg=$('#exReg').value.trim().toUpperCase();f.sn=$('#exSn').value.trim();saveCase()};
+  // times typed here are saved into the case (back-filling what was not entered when the case was opened)
+  const ET=wireTimes('ex',f,()=>{Object.assign(f,ET.read());$('#exTimes').textContent=timesLine(f)||'Not entered yet. Add them here to put them on the PDF.';saveCase()});
+  const sync=()=>{f.reg=$('#exReg').value.trim().toUpperCase();f.sn=$('#exSn').value.trim();Object.assign(f,ET.read());saveCase()};
   $('#exMd').onclick=()=>{sync();exportMarkdown()};
   $('#exBrief').onclick=()=>{sync();openBrief()};
   $('#exPdf').onclick=async()=>{
@@ -3103,7 +3137,7 @@ async function buildMelPdf(meta,g,r){
     font('bold',9,C.amber);doc.text(pclean(`${APPNAME} MEL DEFERRAL`),M,30);
     font('bold',9,C.ink);doc.text('FOR REFERENCE ONLY',W/2,30,{align:'center'});
     font('bold',11,C.ink);doc.text(pclean(`${meta.reg||'Reg —'}   ·   S/N ${meta.sn||'—'}`),W-M,30,{align:'right'});
-    if(meta.times){font('normal',8.5,C.dim);doc.text(pclean(meta.times),W-M,44,{align:'right'})}
+    if(meta.times)pdfTimes(doc,font,C,meta.times,W,M);
     doc.setDrawColor(...C.rule);doc.setLineWidth(.8);doc.line(M,hdrH-8,W-M,hdrH-8);y=hdrH+10;
   }
   const need=h=>{if(y+h>H-46){doc.addPage();header()}};
