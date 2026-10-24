@@ -508,6 +508,22 @@ body.melonly .tab[data-tab=describe],body.melonly .tab[data-tab=search],body.mel
 .camb{background:var(--tonal);color:var(--on-tonal);border:none;border-radius:50%;width:48px;height:48px;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer}
 #chatPhotos{margin:0 0 8px}
 .phview{max-width:100%;max-height:75vh;display:block;margin:0 auto;border-radius:10px}
+/* case brief */
+#briefBar{display:flex;align-items:center;gap:10px;margin:8px 12px 0;padding:10px 12px;border-radius:14px;background:var(--tonal);color:var(--on-tonal);cursor:pointer;font-size:13.5px;line-height:1.35}
+#briefBar .ms{font-size:22px}
+#briefBar .bt{flex:1;min-width:0}
+#briefBar .bh{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#briefBar .bs{opacity:.8;font-size:12px}
+#briefBar.closed{background:var(--panel2);color:var(--text)}
+.bchip{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.6px;border-radius:6px;padding:2px 7px;margin-right:6px;vertical-align:1px}
+.bchip.open{background:var(--cyan);color:var(--on-accent)}
+.bchip.closed{background:var(--text-dim);color:var(--bg)}
+.brief h4{margin:14px 0 4px;font-size:13px;letter-spacing:.4px;color:var(--amber);text-transform:uppercase}
+.brief ul,.brief ol{margin:0 0 0 18px;padding:0}
+.brief li{margin:3px 0}
+.brief .bhead{font-size:17px;font-weight:600;margin:6px 0 2px}
+.brief .bmeta{font-size:12.5px;color:var(--text-dim)}
+#composer.closedcase textarea,#composer.closedcase .camb{opacity:.45;pointer-events:none}
 </style>
 </head>
 <body>
@@ -675,6 +691,7 @@ body.melonly .tab[data-tab=describe],body.melonly .tab[data-tab=search],body.mel
 
     <!-- CHAT -->
     <section id="chatView" class="hidden">
+      <div id="briefBar" class="hidden"></div>
       <div id="chatLog"></div>
       <div id="composer">
         <div class="qchips" id="followChips"></div>
@@ -1423,6 +1440,169 @@ function renderPending(){
 async function addPhotos(files,list){
   for(const f of files){try{list.push(await phFromFile(f));renderPending()}catch(e){showModal('PHOTO',`<div class="errbox">${esc(e.message||e)}</div>`)}}
 }
+/* ═════════════════ CASE BRIEF ═════════════════ */
+// A short, structured summary of the case for tech ops, field service reps, crew and the next technician. Written by the AI
+// from the case record after every AI reply while the case is open; frozen when the case is closed. Synced with the case.
+const BRIEF_STATUS=['Troubleshooting','Awaiting parts','Awaiting support','Deferred (MEL)','Repaired, ops check pending','Repaired, return to service pending','Resolved'];
+const BRIEF_TOOL={name:'write_brief',description:'Write the case brief.',input_schema:{type:'object',properties:{
+  headline:{type:'string',description:'One line: the problem and where it stands now.'},
+  status:{type:'string',enum:BRIEF_STATUS},
+  problem:{type:'string',description:'2–4 sentences: what was reported, how and when it shows, the conditions.'},
+  messages:{type:'array',items:{type:'string'},description:'CAS / CMC messages and fault codes involved.'},
+  work_done:{type:'array',items:{type:'string'},description:'Checks and actions the technician reported doing, in order, each with its result. Never include suggestions that were not done.'},
+  findings:{type:'array',items:{type:'string'},description:'What is established so far, including causes ruled out and why.'},
+  likely_cause:{type:'string',description:'Leading cause, or "Not yet determined".'},
+  confidence:{type:'string',enum:['High','Medium','Low','Not yet determined']},
+  next_steps:{type:'array',items:{type:'string'},description:'The next actions, in order.'},
+  parts:{type:'array',items:{type:'object',properties:{part:{type:'string'},pn:{type:'string'},status:{type:'string'}},required:['part']},description:'Parts identified, ordered, removed or installed; only P/Ns stated in the case.'},
+  support_needed:{type:'array',items:{type:'string'},description:'Questions or help needed from tech ops, the manufacturer field service rep or the crew. Empty if none.'},
+  references:{type:'array',items:{type:'string'},description:'Up to 6 key manual references (task numbers / citations) from the case.'}},
+  required:['headline','status','problem','work_done','next_steps']}};
+const BRIEF_SYS=`You write concise case briefs for an aircraft maintenance team. Readers: tech ops, the manufacturer's field service representatives, flight crew, and the next technician picking up the job. They need the problem, what has been done, where it stands and what happens next — not the reasoning trail.
+Rules: facts only from the case record. Never invent part numbers, serial numbers, values, limits or task numbers. Keep what the technician actually did separate from what the assistant recommended. Short items in plain hangar language, each under about 25 words. Write dates as 21 OCT 2026. Use the citation strings from the record for references.`;
+const briefModel=()=>/haiku|sonnet/.test(cfg.model)?cfg.model:'claude-sonnet-5-5';
+const replies=c=>(c.msgs||[]).filter(m=>m.role==='assistant').length;
+const briefStale=c=>!!(c&&c.brief&&c.status!=='closed'&&c.brief.turns<replies(c));
+function briefTranscript(c){
+  const f=c.form||{},L=[];
+  L.push(`Aircraft: ${APPNAME}${f.reg?' '+f.reg:''}${f.sn?' s/n '+f.sn:''}${f.apt?' at '+f.apt:''}. Case opened ${dmyt(c.created)}${c.by?' by '+c.by:''}.`);
+  for(const m of c.msgs||[]){
+    if(m.role==='user'){const t=m.content.filter(b=>b.type==='text'&&!/^(<<CONTEXT>>|Tool budget reached)/.test(b.text)).map(b=>b.text).join('\n');const n=photoIds(m).length;
+      if(t||n)L.push(`TECHNICIAN: ${t}${n?` [${n} photo${n>1?'s':''} attached]`:''}`)}
+    else{const tools=m.content.filter(b=>b.type==='tool_use').map(b=>toolLabel(b));const t=m.content.filter(b=>b.type==='text'&&b.text).map(b=>b.text).join('\n');
+      if(tools.length)L.push(`(assistant looked up: ${tools.join('; ')})`);if(t)L.push(`ASSISTANT: ${t}`)}}
+  if(c.deferral){const g=typeof melById==='function'&&MEL?melById(c.deferral.mel_id):null;L.push(`RECORDED MEL DEFERRAL: ${g?melTitle(g):c.deferral.mel_id}. ${c.deferral.disc} ${c.deferral.verification}`)}
+  if(c.clearing)L.push(`RECORDED CORRECTIVE ACTION: ${c.clearing.corrective_action}${c.clearing.pn_on?' P/N on '+c.clearing.pn_on:''}${c.clearing.sn_on?' S/N on '+c.clearing.sn_on:''}`);
+  let t=L.join('\n\n');if(t.length>90000)t=t.slice(0,12000)+'\n\n[… middle of the case omitted …]\n\n'+t.slice(-76000);
+  return t;
+}
+let BRIEF_BUSY=null;
+function updateBrief(c){
+  c=c||CASE;if(!c||!cfg.anthropicKey||c.status==='closed'||!replies(c))return Promise.resolve(null);
+  if(BRIEF_BUSY)return BRIEF_BUSY;
+  const id=c.id;renderBriefBar(true);
+  BRIEF_BUSY=(async()=>{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':cfg.anthropicKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:briefModel(),max_tokens:3000,system:BRIEF_SYS,tools:[BRIEF_TOOL],tool_choice:{type:'tool',name:'write_brief'},
+        messages:[{role:'user',content:`Case record:\n\n${briefTranscript(c)}\n\nWrite the case brief as of ${dmyt(new Date())}.`}]})});
+    if(!res.ok){let m=await res.text();try{m=JSON.parse(m).error.message}catch(e){}throw new Error(`Brief: Anthropic API ${res.status}: ${m}`)}
+    const j=await res.json();const tu=(j.content||[]).find(b=>b.type==='tool_use');if(!tu)throw new Error('Brief: no brief returned');
+    const b={...tu.input,at:Date.now(),rev:((c.brief&&c.brief.rev)||0)+1,turns:replies(c)};
+    if(CASE&&CASE.id===id){CASE.brief=b;saveCase()}else{const cs=loadCases();const x=cs.find(y=>y.id===id);if(x){x.brief=b;try{localStorage.setItem(PFX+'_cases',JSON.stringify(cs))}catch(e){}}}
+    return b;
+  })().finally(()=>{BRIEF_BUSY=null;renderBriefBar()});
+  return BRIEF_BUSY;
+}
+function renderBriefBar(busy){
+  const el=$('#briefBar');if(!el)return;const c=CASE;
+  const comp=$('#composer');if(comp)comp.classList.toggle('closedcase',!!(c&&c.status==='closed'));
+  const ci=$('#chatInput');if(ci)ci.placeholder=c&&c.status==='closed'?'Case closed — reopen it from the Case Brief to continue':'Report a result or ask a follow-up…';
+  if(!c||(!c.brief&&!busy&&!BRIEF_BUSY)){el.classList.add('hidden');return}
+  el.classList.remove('hidden');el.classList.toggle('closed',c.status==='closed');
+  const b=c.brief;const st=c.status==='closed'?'Closed':(b&&b.status)||'Troubleshooting';
+  el.innerHTML=`<span class="ms">summarize</span><div class="bt"><div class="bh">${esc(b?b.headline:'Writing the case brief…')}</div><div class="bs">Case Brief · ${esc(st)}${b?` · ${(busy||BRIEF_BUSY)?'updating…':'updated '+esc(dmyt(b.at))}`:''}</div></div><span class="ms">chevron_right</span>`;
+  el.onclick=()=>openBrief();
+}
+const BL=(t,arr,ordered)=>arr&&arr.length?`<h4>${t}</h4><${ordered?'ol':'ul'}>${arr.map(x=>`<li>${esc(x)}</li>`).join('')}</${ordered?'ol':'ul'}>`:'';
+function briefDispatch(c){
+  const out=[];
+  if(c.deferral){const g=MEL?melById(c.deferral.mel_id):null,r=g&&g.rel[c.deferral.option];const iv=r?melInterval(r,melOps(),new Date(c.created)):null;
+    out.push(`MEL deferral: ${g?melTitle(g):c.deferral.mel_id}${r?`, Category ${r.cat}`:''}${iv&&iv.due?`, repair by ${fmtDate(iv.due)}`:''}${c.clearing?' (cleared)':''}`)}
+  if(c.clearing)out.push(`Corrective action: ${c.clearing.corrective_action}`);
+  return out;
+}
+function briefHtml(c){
+  const b=c.brief,f=c.form||{};const closed=c.status==='closed';
+  return `<div class="brief"><div><span class="bchip ${closed?'closed':'open'}">${closed?'CLOSED':'OPEN · LIVE'}</span><span class="bmeta">Revision ${b.rev} · as of ${esc(dmyt(b.at))}${closed?` · closed ${esc(dmyt(c.closedAt))}${c.closedBy?' by '+esc(c.closedBy):''}`:''}</span></div>
+    <div class="bhead">${esc(b.headline)}</div>
+    <div class="bmeta">${esc([APPNAME,f.reg,f.sn&&'S/N '+f.sn,f.apt].filter(Boolean).join(' · '))} · Status: ${esc(closed?'Closed':b.status)}</div>
+    <h4>Problem</h4><div>${esc(b.problem)}</div>
+    ${BL('Messages',b.messages)}${BL('Work done so far',b.work_done,true)}${BL('Findings',b.findings)}
+    ${b.likely_cause?`<h4>Likely cause</h4><div>${esc(b.likely_cause)}${b.confidence?` <span class="bmeta">(confidence: ${esc(b.confidence)})</span>`:''}</div>`:''}
+    ${BL('Next steps',closed?[]:b.next_steps,true)}
+    ${b.parts&&b.parts.length?`<h4>Parts</h4><ul>${b.parts.map(p=>`<li>${esc(p.part)}${p.pn?' · P/N '+esc(p.pn):''}${p.status?' · '+esc(p.status):''}</li>`).join('')}</ul>`:''}
+    ${BL('Dispatch',briefDispatch(c))}${BL('Support needed',closed?[]:b.support_needed)}${BL('References',b.references)}</div>`;
+}
+function briefText(c){
+  const b=c.brief,f=c.form||{},closed=c.status==='closed',L=[];
+  L.push(`CASE BRIEF — ${[APPNAME,f.reg,f.sn&&'S/N '+f.sn].filter(Boolean).join(' · ')}`);
+  L.push(`${closed?'CLOSED '+dmy(c.closedAt):'OPEN'} · revision ${b.rev} · as of ${dmyt(b.at)}`,'',b.headline,'Status: '+(closed?'Closed':b.status),'','PROBLEM',b.problem);
+  const sec=(t,a,o)=>{if(a&&a.length){L.push('',t);a.forEach((x,i)=>L.push(`${o?(i+1)+'.':'-'} ${x}`))}};
+  sec('MESSAGES',b.messages);sec('WORK DONE SO FAR',b.work_done,1);sec('FINDINGS',b.findings);
+  if(b.likely_cause)L.push('','LIKELY CAUSE',`${b.likely_cause}${b.confidence?' (confidence: '+b.confidence+')':''}`);
+  if(!closed)sec('NEXT STEPS',b.next_steps,1);sec('PARTS',(b.parts||[]).map(p=>`${p.part}${p.pn?' · P/N '+p.pn:''}${p.status?' · '+p.status:''}`));
+  sec('DISPATCH',briefDispatch(c));if(!closed)sec('SUPPORT NEEDED',b.support_needed);sec('REFERENCES',b.references);
+  L.push('','Decision-aid summary. Verify against current approved maintenance data.');
+  return L.join('\n');
+}
+async function openBrief(){
+  const c=CASE;if(!c)return;if(c.deferral)try{await loadMel()}catch(e){}
+  const closed=c.status==='closed';
+  const body=()=>c.brief?briefHtml(c)+(briefStale(c)?'<div class="hint" style="margin-top:10px">The case has new replies since this revision; it updates automatically, or tap Update Now.</div>':''):`<div class="kv">${BRIEF_BUSY?'Writing the case brief…':cfg.anthropicKey?'No brief yet. It is written automatically after the first AI reply, or tap Update Now.':'Add your Anthropic API key in Settings to write case briefs.'}</div>`;
+  showModal('CASE BRIEF',`<div id="brBody">${body()}</div>
+    <div class="grid2" style="margin-top:14px"><button class="btn" id="brPdf" ${c.brief?'':'disabled'}>Brief PDF</button><button class="btn2" id="brCopy" ${c.brief?'':'disabled'}>Copy Text</button></div>
+    <div id="brOut" style="margin-top:10px"></div>
+    <div class="grid2" style="margin-top:10px">${closed?'':'<button class="btn2" id="brUpd">Update Now</button>'}<button class="btn2" id="brClose" style="${closed?'grid-column:1/-1':''}">${closed?'Reopen Case':'Close Case'}</button></div>
+    <div class="hint" style="margin-top:10px">${closed?'This is the final brief. Reopening the case lets the brief update again.':'The brief stays live while the case is open: it updates after each AI reply'+(syOn()?' and syncs to every technician':'')+'. Share the PDF or text with tech ops, field service or crew; send a new copy when it changes.'}</div>`);
+  const out=t=>{$('#brOut').innerHTML=t};
+  if($('#brUpd'))$('#brUpd').onclick=async()=>{const bt=$('#brUpd');bt.disabled=true;bt.textContent='Updating…';try{await updateBrief(c);$('#brBody').innerHTML=body();bt.textContent='✔ Updated';$('#brPdf').disabled=$('#brCopy').disabled=!c.brief}catch(e){out(`<div class="errbox">${esc(e.message)}</div>`);bt.disabled=false;bt.textContent='Update Now'}};
+  $('#brCopy').onclick=async()=>{try{await navigator.clipboard.writeText(briefText(c));$('#brCopy').textContent='✔ Copied'}catch(e){out(`<textarea rows="10" style="width:100%">${esc(briefText(c))}</textarea>`)}};
+  $('#brPdf').onclick=async()=>{const bt=$('#brPdf');bt.disabled=true;bt.textContent='Creating PDF…';
+    try{const meta=exportMeta(),blob=await buildBriefPdf(meta,c),name=pdfName(meta).replace(/(_\d{6})?\.pdf$/,`_BRIEF_${dateCode(new Date())}.pdf`);
+      const file=new File([blob],name,{type:'application/pdf'}),url=URL.createObjectURL(blob);bt.textContent='✔ PDF ready';bt.disabled=false;
+      const canShare=!!(navigator.canShare&&navigator.canShare({files:[file]}));
+      out(`<div class="kv" style="margin-bottom:8px">${esc(name)} · ${(blob.size/1024).toFixed(0)} KB</div><div class="grid2">${canShare?'<button class="btn" id="brShare">Share / Send</button>':''}<a class="btn2" href="${url}" download="${esc(name)}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;text-decoration:none;${canShare?'':'grid-column:1/-1'}">${canShare?'Open':'Download PDF'}</a></div>`);
+      if(canShare)$('#brShare').onclick=async()=>{try{await navigator.share({files:[file],title:name})}catch(e){}};
+    }catch(e){bt.disabled=false;bt.textContent='Brief PDF';out(`<div class="errbox">${esc(e.message||e)}</div>`)}};
+  $('#brClose').onclick=async()=>{const bt=$('#brClose');
+    if(closed){c.status='open';delete c.closedAt;delete c.closedBy;saveCase();renderBriefBar();openBrief();return}
+    bt.disabled=true;bt.textContent='Closing…';
+    try{if(cfg.anthropicKey&&(!c.brief||briefStale(c)))await updateBrief(c)}catch(e){}
+    c.status='closed';c.closedAt=Date.now();c.closedBy=syCfg().tech||'';saveCase();renderBriefBar();openBrief()};
+}
+async function buildBriefPdf(meta,c){
+  const {fonts}=await pdfReady();if(c.deferral)try{await loadMel()}catch(e){}
+  const {jsPDF}=window.jspdf;const doc=new jsPDF({unit:'pt',format:'letter'});
+  let SANS='helvetica';
+  if(fonts){doc.addFileToVFS('Lato-Regular.ttf',fonts[0]);doc.addFont('Lato-Regular.ttf','Lato','normal');doc.addFileToVFS('Lato-Bold.ttf',fonts[1]);doc.addFont('Lato-Bold.ttf','Lato','bold');SANS='Lato'}
+  const W=doc.internal.pageSize.getWidth(),H=doc.internal.pageSize.getHeight(),M=48,CW=W-2*M;
+  const C={ink:[21,33,44],dim:[90,104,118],amber:[163,95,0],teal:[0,104,122],rule:[200,210,220],fill:[240,244,247],green:[20,120,60]};
+  const b=c.brief,f=c.form||{},closed=c.status==='closed';let y=0;
+  const font=(st='normal',sz=10,col=C.ink)=>{doc.setFont(SANS,st);doc.setFontSize(sz);doc.setTextColor(...col)};
+  const hdrH=meta.times?62:48;
+  function header(){font('bold',9,C.amber);doc.text(pclean(`${APPNAME} CASE BRIEF`),M,30);
+    font('bold',9,closed?C.dim:C.teal);doc.text(closed?'CLOSED':'OPEN · LIVE',W/2,30,{align:'center'});
+    font('bold',11,C.ink);doc.text(pclean(`${meta.reg||'Reg —'}   ·   S/N ${meta.sn||'—'}`),W-M,30,{align:'right'});
+    if(meta.times){font('normal',8.5,C.dim);doc.text(pclean(meta.times),W-M,44,{align:'right'})}
+    doc.setDrawColor(...C.rule);doc.setLineWidth(.8);doc.line(M,hdrH-8,W-M,hdrH-8);y=hdrH+10}
+  const need=h=>{if(y+h>H-56){doc.addPage();header()}};
+  function para(t,{size=10,color=C.ink,bold=false,indent=0,bullet=null}={}){
+    font(bold?'bold':'normal',size,color);const lines=doc.splitTextToSize(pclean(t),CW-indent);
+    lines.forEach((ln,i)=>{need(size*1.4);font(bold?'bold':'normal',size,color);if(i===0&&bullet){font('normal',size,C.dim);doc.text(bullet,M+indent-12,y+size*.9,{align:'right'});font(bold?'bold':'normal',size,color)}doc.text(ln,M+indent,y+size*.9);y+=size*1.4})}
+  function sec(t){need(30);y+=8;font('bold',8.5,C.amber);doc.text(t,M,y+8);doc.setDrawColor(...C.amber);doc.setLineWidth(.6);doc.line(M,y+12,M+CW,y+12);y+=18}
+  const list=(t,a,o)=>{if(!a||!a.length)return;sec(t);a.forEach((x,i)=>{para(x,{indent:16,bullet:o?(i+1)+'.':'•'});y+=1})};
+  header();
+  font('bold',15,C.ink);const hl=doc.splitTextToSize(pclean(b.headline),CW);doc.text(hl.slice(0,3),M,y+14);y+=20*Math.min(3,hl.length)+2;
+  const rows=[['Aircraft',[APPNAME,f.reg,f.sn&&'S/N '+f.sn].filter(Boolean).join(' · ')],['Status',closed?`Closed ${dmyt(c.closedAt)}${c.closedBy?' by '+c.closedBy:''}`:b.status],
+    ['Case opened',`${dmyt(c.created)}${c.by?' by '+c.by:''}${f.apt?' · '+f.apt:''}`],['Brief',`Revision ${b.rev} · as of ${dmyt(b.at)}`]];
+  for(const [k,v] of rows){font('normal',9.5);const vl=doc.splitTextToSize(pclean(v),CW-110);need(vl.length*13+3);font('bold',9,C.dim);doc.text(k,M,y+9);font('normal',9.5,C.ink);doc.text(vl,M+110,y+9);y+=vl.length*13+2}
+  sec('PROBLEM');para(b.problem);
+  list('MESSAGES',b.messages);list('WORK DONE SO FAR',b.work_done,true);list('FINDINGS',b.findings);
+  if(b.likely_cause){sec('LIKELY CAUSE');para(`${b.likely_cause}${b.confidence?'  (confidence: '+b.confidence+')':''}`)}
+  if(!closed)list('NEXT STEPS',b.next_steps,true);
+  list('PARTS',(b.parts||[]).map(p=>`${p.part}${p.pn?' · P/N '+p.pn:''}${p.status?' · '+p.status:''}`));
+  list('DISPATCH',briefDispatch(c));if(!closed)list('SUPPORT NEEDED',b.support_needed);list('REFERENCES',b.references);
+  // up to four photos from the case, two per row
+  const ids=(c.msgs||[]).flatMap(m=>m.role==='user'?photoIds(m):[]).slice(0,4);const imgs=[];for(const id of ids){const u=await phData(id);if(u)imgs.push(u)}
+  if(imgs.length){sec('PHOTOS');const GW=(CW-12)/2,MAXH=170;let col=0,rowH=0;
+    for(const u of imgs){const p=doc.getImageProperties(u),k=Math.min(GW/p.width,MAXH/p.height),w=p.width*k,h=p.height*k;if(col===0)need(h+6);doc.addImage(u,'JPEG',M+col*(GW+12),y,w,h);rowH=Math.max(rowH,h);if(col===1){y+=rowH+6;col=0;rowH=0}else col=1}
+    if(col===1)y+=rowH+6}
+  const n=doc.getNumberOfPages();
+  for(let p=1;p<=n;p++){doc.setPage(p);font('normal',7.5,C.dim);
+    doc.text(doc.splitTextToSize(pclean(closed?`Final case brief — case closed ${dmy(c.closedAt)}. Decision-aid summary; verify against current approved maintenance data.`:`Live case brief — revision ${b.rev}, current as of ${dmyt(b.at)}. A later revision supersedes this copy until the case is closed. Decision-aid summary; verify against current approved maintenance data.`),CW-70),M,H-34);
+    doc.text(`Page ${p} of ${n}`,W-M,H-34,{align:'right'})}
+  return doc.output('blob');
+}
 function withCacheBreakpoint(msgs){
   const c=JSON.parse(JSON.stringify(msgs));
   const last=c[c.length-1];
@@ -1465,6 +1645,7 @@ async function runAgent(){
       saveCase();
     }
     view.finish(CASE.usage);
+    if(CASE.status!=='closed')updateBrief(CASE).catch(e=>console.warn(e));
   }catch(e){
     if(e.name==='AbortError'){view.error('Stopped.');fixDanglingToolUse()}
     else{view.error(e.message+(e.status===401?'\n\nCheck your Anthropic API key in Settings.':e.status===429?'\n\nRate limited — wait a moment and resend.':''));fixDanglingToolUse()}
@@ -1584,6 +1765,7 @@ function renderCase(){
     }
   }
   $('#caseTitle').textContent=CASE.title?' · '+CASE.title:'';
+  renderBriefBar();
   {const w=$('#wSn');if(w)w.value=(CASE.form&&CASE.form.sn)||''}useWiringFor((CASE.form&&CASE.form.sn)||'').catch(()=>{});
   syncSessName();
   {const slots=$$('#chatLog .deferralslot');if(slots.length&&(CASE.deferral||CASE.clearing))loadMel().then(()=>{const c=deferralCard();if(c)slots[slots.length-1].replaceWith(c)}).catch(()=>{})}
@@ -2144,6 +2326,7 @@ function renderFollowChips(){$('#followChips').innerHTML=FOLLOW.map(t=>`<button 
 function setSendState(){const s=$('#btnSend');s.classList.toggle('stop',BUSY);s.innerHTML=BUSY?'<span class="ms fill">stop</span>':'<span class="ms">arrow_upward</span>';s.title=BUSY?'Stop':'Send'}
 function sendChat(){
   if(BUSY){ABORT?.abort();return}
+  if(CASE&&CASE.status==='closed'){openBrief();return}
   const t=$('#chatInput').value.trim();if((!t&&!PH_CHAT.length)||!CASE)return;
   $('#chatInput').value='';autoGrow();
   const ids=PH_CHAT;PH_CHAT=[];renderPending();
@@ -2211,7 +2394,7 @@ async function syApi(path,{method='GET',body=null,raw=false}={}){
 function syErr(r){return r.status===401?'Case sync: token invalid or expired':r.status===403?'Case sync: the token cannot write to the cases repo (needs Contents: Read and write)':r.status===404?'Case sync: cases repo not found, or the token has no access to it':`Case sync: GitHub ${r.status}`}
 function syMeta(c,sha){const f=c.form||{};let ata='';try{ata=caseAta(f)}catch(e){}
   return {sha,created:c.created,updated:c.updated,reg:String(f.reg||'').toUpperCase(),ata:ata||(c.deferral&&c.deferral.ata)||'',title:c.title||'',named:!!c.named,
-    replies:(c.msgs||[]).filter(m=>m.role==='assistant').length,by:c.by||'',editedBy:c.editedBy||'',def:!!c.deferral,clr:!!c.clearing}}
+    replies:(c.msgs||[]).filter(m=>m.role==='assistant').length,by:c.by||'',editedBy:c.editedBy||'',def:!!c.deferral,clr:!!c.clearing,st:c.status||'open',hl:(c.brief&&c.brief.headline)||''}}
 function syStoreLocal(c){let cs=loadCases().filter(x=>x.id!==c.id);cs.push(c);cs.sort((a,b)=>(b.updated||0)-(a.updated||0));cs=cs.slice(0,20);
   for(;;){try{localStorage.setItem(SY_PFX+'_cases',JSON.stringify(cs));break}catch(e){if(cs.length<=1)break;cs.pop()}}}
 async function syFetch(id){const r=await syApi(syPath(id),{raw:true});if(!r.ok)throw new Error(syErr(r));return JSON.parse(await r.text())}
@@ -2231,10 +2414,17 @@ async function syPush(c){
     throw new Error(syErr(r));
   }
 }
+async function syPushBrief(c){
+  if(!c.brief)return;const key=SY_PFX+'_briefpushed',done=store.get(key,{});const stamp=c.brief.at+'|'+(c.status||'');if(done[c.id]===stamp)return;
+  const path=`briefs/${syAC()}/${c.id}.md`;let sha=null;const g=await syApi(path);if(g.ok)sha=(await g.json()).sha;else if(g.status!==404)throw new Error(syErr(g));
+  const prev=CASE;CASE=c;let md;try{md='```\n'+briefText(c)+'\n```\n'}finally{CASE=prev}
+  const r=await syApi(path,{method:'PUT',body:JSON.stringify({message:`${syAC()} ${(c.form&&c.form.reg)||''} case brief rev ${c.brief.rev}${c.status==='closed'?' (closed)':''}`.replace(/\s+/g,' '),content:b64utf8(md),...(sha?{sha}:{})})});
+  if(!r.ok)throw new Error(syErr(r));done[c.id]=stamp;store.set(key,done);
+}
 async function syFlush(){
   if(!syOn())return;if(SY.busy)return SY.busy;
   let done;SY.busy=new Promise(r=>done=r);syStat();
-  try{for(let pass=0;pass<3&&syDirty().length;pass++)for(const id of syDirty()){const c=loadCases().find(x=>x.id===id);if(c)await syPush(c);else syMark(id,false)}SY.err=''}
+  try{for(let pass=0;pass<3&&syDirty().length;pass++)for(const id of syDirty()){const c=loadCases().find(x=>x.id===id);if(c){await syPush(c);try{await syPushBrief(c)}catch(e){console.warn(e)}}else syMark(id,false)}SY.err=''}
   catch(e){SY.err=String(e.message||e)}finally{SY.busy=null;done();syStat()}
 }
 async function syPull(){
@@ -2277,7 +2467,8 @@ function syAll(){
   const rem=Object.entries(idx).filter(([id])=>!ids.has(id)).map(([id,m])=>({id,remote:true,m,created:m.created,updated:m.updated,named:m.named,title:m.title,by:m.by}));
   return [...loc,...rem].sort((a,b)=>(b.updated||0)-(a.updated||0));
 }
-function syLabel(c){if(!c.remote)return caseListLabel(c);const m=c.m;return `${m.reg||'No Tail'} · ATA ${m.ata||'—'} · ${dmy(new Date(m.created||m.updated))}`}
+function syLabel(c){const closed=c.remote?c.m.st==='closed':c.status==='closed';const hl=c.remote?c.m.hl:(c.brief&&c.brief.headline);
+  if(!c.remote)return caseListLabel(c)+(closed?' · Closed':'')+(hl?' — '+hl:'');const m=c.m;return `${m.reg||'No Tail'} · ATA ${m.ata||'—'} · ${dmy(new Date(m.created||m.updated))}${closed?' · Closed':''}${hl?' — '+hl:''}`}
 function syRenderCases(){
   const cases=syAll();const reps=c=>c.remote?c.m.replies:(c.msgs||[]).filter(m=>m.role==='assistant').length;
   showModal('RECENT CASES',`<div class="hint" id="syStat" style="margin:0 0 6px"></div>`+(cases.length?`<div class="caselist">${cases.map(c=>`<div class="ci"><div class="t" data-id="${c.id}"><div>${esc(syLabel(c))}</div><div>${c.named?esc(c.title)+' · ':''}Updated ${dmyt(c.updated)} · ${(n=>n+(n===1?' reply':' replies'))(reps(c))}${c.by?' · '+esc(c.by):''}${c.remote?' · <span class="ms" style="font-size:14px;vertical-align:-2px" title="Saved on another device">cloud</span>':''}</div></div><button class="btn2 small danger" data-del="${c.id}">Delete</button></div>`).join('')}</div>`:'<div class="kv">No saved cases yet.</div>'));
@@ -2467,13 +2658,15 @@ $('#btnExport').onclick=()=>{
   showModal('EXPORT CASE',`<div class="kv"><b>${esc(CASE.title)}</b><br>${CASE.msgs.filter(m=>m.role==='assistant').length} replies · opened ${esc(dmyt(CASE.created))}</div>
     <div class="grid2"><div class="field"><label>Registration</label><input id="exReg" value="${esc(f.reg||'')}" placeholder="N1KE" autocapitalize="characters" autocomplete="off"></div><div class="field"><label>Serial number</label><input id="exSn" value="${esc(f.sn||'')}" placeholder="${esc(SN_HINT)}" autocomplete="off"></div></div>
     <div class="hint" id="exTimes" style="margin:-4px 0 12px">${esc(timesLine(f)||'No aircraft / engine times entered for this case.')}</div>
-    <button class="btn" id="exPdf">Create PDF</button>
+    <button class="btn" id="exBrief" style="margin-bottom:10px">Case Brief (Short Summary)</button>
+    <button class="btn2" id="exPdf" style="width:100%">Full Report PDF</button>
     <div id="exOut" style="margin-top:12px"></div>
     <button class="btn2" id="exMd" style="width:100%;margin-top:12px">Download Markdown (.md)</button>
     ${melOps().amdl?`<button class="btn2" id="exAmdl" style="width:100%;margin-top:12px">${esc(formTitle())} (${CASE.clearing?'Completed':CASE.deferral?'MEL Deferral':'Discrepancy'})</button>`:''}`);
   if($('#exAmdl'))$('#exAmdl').onclick=async()=>{sync();if(CASE.deferral)try{await loadMel()}catch(e){}openCaseAmdl()};
   const sync=()=>{f.reg=$('#exReg').value.trim().toUpperCase();f.sn=$('#exSn').value.trim();saveCase()};
   $('#exMd').onclick=()=>{sync();exportMarkdown()};
+  $('#exBrief').onclick=()=>{sync();openBrief()};
   $('#exPdf').onclick=async()=>{
     sync();const btn=$('#exPdf');btn.disabled=true;btn.textContent='Creating PDF…';$('#exOut').innerHTML='';
     try{
@@ -2483,7 +2676,7 @@ $('#btnExport').onclick=()=>{
       $('#exOut').innerHTML=`<div class="kv" style="margin-bottom:8px">${esc(name)} · ${(blob.size/1024).toFixed(0)} KB</div>
         <div class="grid2">${canShare?'<button class="btn" id="exShare">Share / Save</button>':''}<a class="btn2" id="exOpen" href="${url}" download="${esc(name)}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;text-decoration:none;${canShare?'':'grid-column:1/-1'}">${canShare?'Open':'Download PDF'}</a></div>`;
       if(canShare)$('#exShare').onclick=async()=>{try{await navigator.share({files:[file],title:name})}catch(e){if(e.name!=='AbortError')$('#exOut').insertAdjacentHTML('beforeend',`<div class="errbox" style="margin-top:8px">${esc(e.message)}</div>`)}};
-    }catch(e){btn.disabled=false;btn.textContent='Create PDF';$('#exOut').innerHTML=`<div class="errbox">${esc(e.message||String(e))}</div>`}
+    }catch(e){btn.disabled=false;btn.textContent='Full Report PDF';$('#exOut').innerHTML=`<div class="errbox">${esc(e.message||String(e))}</div>`}
   };
 };
 
