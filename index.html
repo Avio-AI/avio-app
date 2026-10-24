@@ -628,6 +628,8 @@ body.melonly .tab[data-tab=describe],body.melonly .tab[data-tab=search],body.mel
         <div class="card hidden" id="wNoData"></div>
         <div class="card">
           <h3>Wiring lookup</h3>
+          <div class="field"><label>Aircraft serial number</label><input id="wSn" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="Picks the wiring for this serial"></div>
+          <div class="hint hidden" id="wSetNote" style="margin:-4px 0 10px"></div>
           <div class="field"><input id="wQuery" placeholder="Designator, wire number, P/N or description" autocomplete="off" autocapitalize="characters" spellcheck="false"></div>
           <div class="grid2">
             <div class="field"><select id="wMode"><option value="comp">Find Component</option><option value="pins">Connector Pin-Out</option><option value="wire">Trace Wire Number</option></select></div>
@@ -802,10 +804,11 @@ async function loadCore(){
     const [cat,faults,cmc,prof]=await Promise.all([optional(fetchData('catalog.json')),optional(fetchData('faults.json')),optional(fetchData('cmc.json')),optional(fetchData('profile.json',{cache:false}))]);
     DATA.catalog=cat||[];DATA.faults=faults||[];DATA.cmc=cmc||{messages:[],codes:[]};
     PROFILE=normProfile({...(DATA.manifest.profile||{}),...(prof||{})});
+    WBASE.catLen=DATA.catalog.length;WSET=null;WSET_P=Promise.resolve();
     DATA.byCite=new Map(DATA.catalog.filter(d=>d.c).map(d=>[normCite(d.c),d]));
     const pm=PROFILE.pagemap||DATA.manifest.pagemap;DATA.pagemap=pm?await optional(fetchData(pm)):null;DATA.docShard=new Map();
     DATA.wsys=new Map(DATA.catalog.filter(isWiring).map(d=>[wsysName(d),d]));
-    DATA.ready=true; setDot('ok');
+    DATA.ready=true; setDot('ok');renderWsetNote();
     {const fc=store.get('avio_fleetcache',{});fc[cfg.active]=FLEET&&FLEET.length?FLEET.map(t=>({id:t.id,name:t.name||t.id,full:t.full||'',mode:t.mode||'full'})):[{id:null,name:PROFILE.short,full:PROFILE.aircraft,mode:'full'}];store.set('avio_fleetcache',fc)}
     applyProfileUi(); renderBadges(); fillChapterSelect();
   }catch(e){
@@ -865,14 +868,53 @@ function shardKeyFor(doc,page){
 }
 /* ── wiring data (components, pin tables, schematic sheets) ── */
 const CTYPE={C:'Connector',I:'Inline connector',D:'Device / LRU',S:'Splice',G:'Ground'};
-async function loadComps(){if(!DATA.comps)DATA.comps=fetchData('wiring/components.json.gz');try{return await DATA.comps}catch(e){DATA.comps=null;throw e}}
+/* wiring sets: manifest.wiring.sets = [{from, to, path}] by aircraft serial number. Each set folder holds set.json,
+   systems.json (its wiring documents, ids local to the set), sheets.json.gz (sheet text), components, pins and svg in
+   the same formats as wiring/. With no serial, or a serial outside every set, the top-level wiring/ data is used. */
+let WSET=null,WSET_P=Promise.resolve();const WBASE={catLen:0};
+const wroot=()=>WSET?WSET.path:'wiring/';
+const wsets=()=>(DATA.manifest&&DATA.manifest.wiring&&DATA.manifest.wiring.sets)||[];
+function snNum(v){const m=String(v||'').match(/\d{3,}/);return m?+m[0]:NaN}
+function setForSn(sn){const n=snNum(sn);return isNaN(n)?null:wsets().find(x=>n>=x.from&&n<=x.to)||null}
+function wiringActive(d){return WSET?!!d.wset:!d.wset}
+function curSn(){const w=$('#wSn');return (w&&w.value.trim())||(CASE&&CASE.form&&CASE.form.sn)||($('#fSn')&&$('#fSn').value.trim())||''}
+function rebuildWiringIndex(){
+  DATA.wsys=new Map(DATA.catalog.filter(d=>isWiring(d)&&wiringActive(d)).map(d=>[wsysName(d),d]));
+  DATA.byCite=new Map(DATA.catalog.filter(d=>d.c&&(!isWiring(d)||wiringActive(d))).map(d=>[normCite(d.c),d]));
+}
+function useWiringFor(sn){
+  if(!wsets().length)return Promise.resolve(null);
+  WSET_P=WSET_P.catch(()=>{}).then(async()=>{
+    const x=setForSn(sn),key=x?x.path:'';
+    if((WSET?WSET.path:'')===key)return WSET;
+    DATA.catalog.length=WBASE.catLen;DATA.comps=null;DATA.pins=new Map();svgTexts.clear();DATA.shards.delete('wset');WSET=null;
+    DHIST=[];try{sessionStorage.removeItem(HIST_KEY)}catch(e){}
+    if(x){const [meta,sys]=await Promise.all([fetchData(x.path+'set.json'),fetchData(x.path+'systems.json')]);
+      for(const d of sys)DATA.catalog.push({...d,id:WBASE.catLen+d.id,s:'wset',wset:true});
+      WSET={...x,meta,base:WBASE.catLen}}
+    rebuildWiringIndex();renderWsetNote();try{renderRecentTab()}catch(e){}
+    return WSET});
+  return WSET_P;
+}
+// the wiring package in use, for the technician and in every wiring tool result
+function wsetLine(sn){
+  if(!wsets().length)return '';
+  const S=wsets(),all=`s/n ${S[0].from}–${S[S.length-1].to}`,def=(PROFILE.wiring&&PROFILE.wiring.defaultEffectivity)||'the default wiring package';
+  if(WSET)return `${(WSET.meta&&WSET.meta.package)||'Wiring package'} (${(WSET.meta&&WSET.meta.rev)||''} · s/n ${WSET.from}–${WSET.to}), selected from aircraft s/n ${sn||curSn()}`.replace(' ( · ',' (');
+  const n=snNum(sn===undefined?curSn():sn);
+  return isNaN(n)?`No aircraft serial number given, so this is ${def}. Wiring differs between serial ranges (${all}): ask for the serial number before relying on designators, pins or wire numbers.`
+    :`Aircraft s/n ${n} is outside every wiring package (${all}), so this is ${def}. Verify against the wiring for that serial.`;
+}
+function renderWsetNote(){const e=$('#wSetNote');if(!e)return;const t=wsetLine();e.textContent=t;e.classList.toggle('hidden',!t)}
+async function loadComps(){if(!DATA.comps)DATA.comps=fetchData(wroot()+'components.json.gz');try{return await DATA.comps}catch(e){DATA.comps=null;throw e}}
 async function loadPins(ch){
   if(DATA.pins.has(ch))return DATA.pins.get(ch);
-  if(!(DATA.manifest.wiring?.pinChapters||[]).includes(ch))return null;
-  const p=fetchData(`wiring/pins/${ch}.json.gz`);DATA.pins.set(ch,p);
+  if(!pinChapters().includes(ch))return null;
+  const p=fetchData(`${wroot()}pins/${ch}.json.gz`);DATA.pins.set(ch,p);
   try{return await p}catch(e){DATA.pins.delete(ch);throw e}
 }
-async function allPins(){const out=[];for(const ch of DATA.manifest.wiring?.pinChapters||[]){const p=await loadPins(ch);if(p)out.push(p)}return out}
+function pinChapters(){return (WSET&&WSET.meta&&WSET.meta.pinChapters)||DATA.manifest.wiring?.pinChapters||[]}
+async function allPins(){const out=[];for(const ch of pinChapters()){const p=await loadPins(ch);if(p)out.push(p)}return out}
 function diagRef(sys,dia){
   const d=DATA.wsys.get(sys);if(!d)return {system:sys,sheet:dia};
   const i=(d.dia||[]).indexOf(dia);const page=i>=0?i+1:1;
@@ -916,6 +958,8 @@ async function traceWire(w){
 }
 async function loadShard(k){
   if(DATA.shards.has(k))return DATA.shards.get(k);
+  if(k==='wset'){if(!WSET)return null;const W=WSET;const p=(async()=>{const rows=await fetchData(W.path+'sheets.json.gz');return {key:k,pages:rows.map(r=>[W.base+r[0],r[1],r[2],r[3]]),idx:null}})();
+    DATA.shards.set(k,p);try{return await p}catch(e){DATA.shards.delete(k);throw e}}
   if(!DATA.manifest.shards[k])return null;
   const p=(async()=>{const pages=await fetchData(`shards/${k}.json.gz`);return {key:k,pages,idx:null}})();
   DATA.shards.set(k,p);
@@ -957,7 +1001,7 @@ function searchShard(sh,q,manuals){
       const w=et===t?1:.6;
       for(let j=0;j<post.length;j+=2){
         const i=post[j],tf=post[j+1];
-        const dd=DATA.catalog[sh.pages[i][0]];if(manuals&&!manuals.has(dd.m))continue;if(dd.type&&dd.type.endsWith('(xref)'))continue;
+        const dd=DATA.catalog[sh.pages[i][0]];if(!dd||(isWiring(dd)&&!wiringActive(dd)))continue;if(manuals&&!manuals.has(dd.m))continue;if(dd.type&&dd.type.endsWith('(xref)'))continue;
         const s=w*idf*(tf*(k1+1))/(tf+k1*(1-b+b*idx.lens[i]/idx.avg));
         scores.set(i,(scores.get(i)||0)+s);
         let h=hits.get(i);if(!h){h=new Set();hits.set(i,h)}h.add(t);
@@ -1017,6 +1061,8 @@ async function searchManuals(query,{chapters,manuals,max=8}={}){
   if(ms&&DATA.catalog.some(d=>d.s==='mel'&&ms.has(d.m))&&DATA.manifest.shards.mel&&!ch.includes('mel'))ch.push('mel');
   const shards=(await Promise.all(ch.map(loadShard))).filter(Boolean);
   let res=[];for(const sh of shards)res.push(...searchShard(sh,query,ms));
+  if(WSET&&(!ms||ms.has(WCODE))){const ws=await loadShard('wset');const chs=new Set(ch);
+    if(ws)res.push(...searchShard(ws,query,ms).filter(r=>chs.has(String(DATA.catalog[ws.pages[r.i][0]].ata||'').slice(0,2))))}
   res.sort((a,b)=>b.score-a.score);
   // diversify: max 2 pages per document
   const per=new Map(),out=[];
@@ -1201,24 +1247,24 @@ async function runTool(name,input){
     }
     if(name==='list_documents'){
       const ap=(input.ata_prefix||'').trim(),m=input.manual,tc=(input.title_contains||'').toLowerCase();
-      let r=DATA.catalog.filter(d=>(!ap||(d.ata||'').startsWith(ap.length===1?'0'+ap:ap))&&(!m||d.m===m)&&(!tc||d.title.toLowerCase().includes(tc)||(d.type||'').toLowerCase().includes(tc)));
+      let r=DATA.catalog.filter(d=>(!isWiring(d)||wiringActive(d))&&(!ap||(d.ata||'').startsWith(ap.length===1?'0'+ap:ap))&&(!m||d.m===m)&&(!tc||d.title.toLowerCase().includes(tc)||(d.type||'').toLowerCase().includes(tc)));
       const total=r.length;r=r.slice(0,60);
       r.forEach(d=>registerSource({cite:citeFor(d,1),doc_id:d.id,pdf_page:1}));
       return {summary:`${total} docs`,data:{total,shown:r.length,documents:r.map(d=>({doc_id:d.id,manual:d.m,cite_prefix:d.c,ata:d.ata,type:d.type,title:d.title,pages:d.pages,rev:d.rev}))}};
     }
-    if(name==='find_component'){
+    if(name==='find_component'){const eff=wsetLine((CASE&&CASE.form&&CASE.form.sn)||'')||undefined;
       const r=(await findComponents(input.query,{ata_prefix:input.ata_prefix})).map(compObj);
       r.forEach(c=>c.diagrams.forEach(d=>registerSource({...d,hl:[{t:c.designator,kind:'comp'}]})));
-      return {summary:`${r.length} component${r.length===1?'':'s'}`,data:{matches:r}};
+      return {summary:`${r.length} component${r.length===1?'':'s'}`,data:{wiring_effectivity:eff,matches:r}};
     }
-    if(name==='get_connector_pins'){
+    if(name==='get_connector_pins'){const eff=wsetLine((CASE&&CASE.form&&CASE.form.sn)||'')||undefined;
       const t=await connectorPins(input.connector,{filter:input.filter});
       if(!t.length)return {summary:'not found',data:{error:`No pin table for "${input.connector}". Check the exact designator with find_component (devices connect through connectors such as plugs / jacks with their own designators).`}};
-      return {summary:`${t.map(x=>x.connector).join(', ')} · ${t.reduce((a,x)=>a+x.rows.length,0)} pins`,data:{tables:t.map(x=>({connector:x.connector,harness:x.harness,pins:x.rows.slice(0,140).map(pinObj),truncated:x.rows.length>140||undefined})),cite_as:`${WCODE} ${input.connector} pin-out`}};
+      return {summary:`${t.map(x=>x.connector).join(', ')} · ${t.reduce((a,x)=>a+x.rows.length,0)} pins`,data:{wiring_effectivity:eff,tables:t.map(x=>({connector:x.connector,harness:x.harness,pins:x.rows.slice(0,140).map(pinObj),truncated:x.rows.length>140||undefined})),cite_as:`${WCODE} ${input.connector} pin-out`}};
     }
-    if(name==='trace_wire'){
+    if(name==='trace_wire'){const eff=wsetLine((CASE&&CASE.form&&CASE.form.sn)||'')||undefined;
       const r=await traceWire(input.wire);
-      return {summary:`${r.length} segment${r.length===1?'':'s'}`,data:{segments:r,cite_as:`${WCODE} wire ${input.wire}`}};
+      return {summary:`${r.length} segment${r.length===1?'':'s'}`,data:{wiring_effectivity:eff,segments:r,cite_as:`${WCODE} wire ${input.wire}`}};
     }
     throw new Error('Unknown tool '+name);
   }catch(e){return {summary:'error',error:true,data:{error:String(e.message||e)}}}
@@ -1234,7 +1280,7 @@ function systemPrompt(){
   const P=PROFILE,m=DATA.manifest||{},rev=m.revisions||{};
   const has={faults:DATA.faults.length>0,fim:(m.fimChapters||[]).length>0,cmc:(DATA.cmc.messages||[]).length+(DATA.cmc.codes||[]).length>0,wiring:!!m.wiring,mel:!!m.mel,docs:DATA.catalog.length>0};
   const lib=P.library||P.manuals.map(x=>`- ${x.code}${x.name?' — '+x.name:''}${rev[x.code]?' ('+rev[x.code]+')':''}${x.about?': '+x.about:''}`).join('\n');
-  const steps=[];
+  const steps=[];const WS=wsets();
   steps.push(`For every fault message given, call lookup_fault to get what the index holds (color, trigger logic, fault code, procedure).${has.fim?' When it returns a procedure id, call get_fim_procedure and work its probable causes in order; check that the tasks it references still match the current maintenance manual revision.':''}${has.cmc?' For every maintenance message or fault code given, call lookup_cmc and read the pages that name it.':''}${P.method?' '+P.method:''}`);
   steps.push('Understand the system before judging: read the system description (and training material if present) for how the message is generated: sensors, thresholds, controllers, time delays, inhibits, BIT, data paths. Search for the exact message wording and the logic.');
   steps.push('Use the reported conditions as evidence. Phase of flight, altitude, temperatures, pressures, side, intermittency, recent maintenance and what has already been checked must actively raise or lower each hypothesis. Example: a fault only at high altitude / cold soak points toward pressure- or temperature-sensitive components and connectors, not a hard LRU failure; a fault that follows a swap points toward what moved.');
@@ -1250,12 +1296,12 @@ function systemPrompt(){
 # Your library (searchable through tools)
 Aircraft: ${P.aircraft}.
 ${lib}
-${(m.gaps||[]).length?'Known gaps: '+m.gaps.join(' | '):''}
+${(P.gaps||m.gaps||[]).length?'Known gaps: '+(P.gaps||m.gaps).join(' | '):''}
 ${has.docs?'':'This data set has no manual page text: answer from the fault index and MEL only, and say what manual data is missing.'}
 
 # How to work
 ${steps.map((t,i)=>`${i+1}. ${t}`).join('\n')}
-Do not stop at one search: search, read the relevant pages, cross-check between manuals. Keep tool calls purposeful (typically 3–10 per turn).
+${WS.length?`Wiring effectivity: the wiring data comes in packages by aircraft serial number (s/n ${WS[0].from}–${WS[WS.length-1].to}). The app loads the package for the serial on the case; every wiring tool result names the package used (wiring_effectivity). If no serial was given, ask for it before giving designators, pins or wire numbers as fact.\n`:''}Do not stop at one search: search, read the relevant pages, cross-check between manuals. Keep tool calls purposeful (typically 3–10 per turn).
 
 # Rules
 - Write every date as day, three-letter month in capitals, four-digit year: 21 OCT 2026 (also in logbook / corrective-action wording).
@@ -1318,6 +1364,7 @@ let BUSY=false;
 async function runAgent(){
   if(!cfg.anthropicKey){openSettings('Add your Anthropic API key to use the AI assistant.');return}
   BUSY=true;setSendState();
+  try{await useWiringFor((CASE.form&&CASE.form.sn)||'')}catch(e){console.error(e)}
   const TL=buildTools();const tools=TL.map((t,i)=>i===TL.length-1?{...t,cache_control:{type:'ephemeral'}}:t);
   const sys=[{type:'text',text:systemPrompt(),cache_control:{type:'ephemeral'}}];
   let useThinking=cfg.thinking;
@@ -1465,6 +1512,7 @@ function renderCase(){
     }
   }
   $('#caseTitle').textContent=CASE.title?' · '+CASE.title:'';
+  {const w=$('#wSn');if(w)w.value=(CASE.form&&CASE.form.sn)||''}useWiringFor((CASE.form&&CASE.form.sn)||'').catch(()=>{});
   syncSessName();
   {const slots=$$('#chatLog .deferralslot');if(slots.length&&(CASE.deferral||CASE.clearing))loadMel().then(()=>{const c=deferralCard();if(c)slots[slots.length-1].replaceWith(c)}).catch(()=>{})}
   renderFollowChips();
@@ -1493,7 +1541,7 @@ async function resolveCite(c){
 }
 const svgTexts=new Map();
 async function svgText(path){
-  if(!svgTexts.has(path))svgTexts.set(path,fetchText(`wiring/svg/${path.replace(/\//g,'_')}.gz`).catch(e=>{svgTexts.delete(path);throw e}));
+  if(!svgTexts.has(path))svgTexts.set(path,fetchText(`${wroot()}svg/${path.replace(/\//g,'_')}.gz`).catch(e=>{svgTexts.delete(path);throw e}));
   return svgTexts.get(path);
 }
 function svgNode(txt){
@@ -1632,7 +1680,7 @@ async function gotoDrawing(doc,terms,sheet){
 }
 function showAtaDrawings(ata,terms){
   const pre=/-00-00$/.test(ata)?ata.slice(0,2):/-00$/.test(ata)?ata.slice(0,5):ata;
-  const docs=DATA.catalog.filter(d=>isWiring(d)&&(d.ata||'').startsWith(pre));
+  const docs=DATA.catalog.filter(d=>isWiring(d)&&wiringActive(d)&&(d.ata||'').startsWith(pre));
   showModal(`Wiring — ATA ${ata}`,`${NAV.length?'<button class="btn2 small" id="xBack" style="margin-bottom:10px">◂ Back</button>':''}<div class="kv">${docs.length} wiring drawing${docs.length===1?'':'s'} in ATA ${esc(pre)}${terms.length?` · looking for <b>${esc(terms.join(', '))}</b>`:''}</div><div class="xlist">${docs.map(d=>`<div class="res" data-x="${d.id}"><div class="h"><span class="mt">${esc(d.m)}</span><span class="ttl">${esc(wsysName(d))}</span></div><div class="lb">${esc(d.title)} · ATA ${esc(d.ata)} · ${d.pages} sheet${d.pages>1?'s':''}</div></div>`).join('')||'<div class="hint">No wiring drawings indexed for this ATA.</div>'}</div>`);
   $$('.xlist .res').forEach(el=>el.onclick=()=>gotoDrawing(DATA.catalog[+el.dataset.x],terms));
   const b=$('#xBack');if(b)b.onclick=()=>{const p=NAV.pop();if(p)openPage(p.docId,p.page,{...p.opt,noPush:true})};
@@ -1668,6 +1716,7 @@ function linkXrefs(svg,cur){
   return n;
 }
 async function openPage(docId,page,opt={}){
+  if(DATA.catalog[docId]&&DATA.catalog[docId].wset&&!WSET)return showModal('Wiring','<div class="errbox">This drawing belongs to another serial range. Enter the aircraft serial number to open it.</div>');
   if(opt.back&&!opt.noPush&&window._curPage)NAV.push(window._curPage);
   if(!opt.back&&!opt.noPush&&!opt.keep)NAV.length=0;
   const pg=await getPage(docId,page);if(!pg){showModal('Page','<div class="errbox">Page not found.</div>');return}
@@ -1773,7 +1822,7 @@ async function openPage(docId,page,opt={}){
 document.addEventListener('click',async e=>{
   const c=e.target.closest('.cite');if(!c)return;
   if(!DATA.ready){showModal('Reference','<div class="errbox">Manual data not loaded.</div>');return}
-  c.style.opacity=.5;const r=await resolveCite(c.dataset.cite);c.style.opacity='';
+  c.style.opacity=.5;try{await useWiringFor(curSn())}catch(e){}const r=await resolveCite(c.dataset.cite);c.style.opacity='';
   if(r&&r.pins)showPins(r.pins);else if(r&&r.wire)showWire(r.wire);else if(r)openPage(r.doc_id,r.pdf_page,{hl:r.hl||[]});else showModal(c.dataset.cite,'<div class="kv">This reference could not be matched to an indexed page. Try the Search tab.</div>');
 });
 
@@ -1877,7 +1926,8 @@ function openSettings(note,welcome){
   $('#stOffline').onclick=async()=>{
     if(!DATA.ready){st('Connect the data source first.');return}
     const m=DATA.manifest;
-    const files=[...Object.keys(m.shards||{}).map(k=>`shards/${k}.json.gz`),...(m.mel?['mel.json.gz']:[]),...(m.fimChapters||[]).map(c=>`fim/${c}.json.gz`),...(m.wiring?['wiring/components.json.gz',...(m.wiring.pinChapters||[]).map(c=>`wiring/pins/${c}.json.gz`)]:[])];
+    const files=[...Object.keys(m.shards||{}).map(k=>`shards/${k}.json.gz`),...(m.mel?['mel.json.gz']:[]),...(m.fimChapters||[]).map(c=>`fim/${c}.json.gz`),...(m.wiring?['wiring/components.json.gz',...(m.wiring.pinChapters||[]).map(c=>`wiring/pins/${c}.json.gz`)]:[]),
+      ...(WSET?['set.json','systems.json','sheets.json.gz','components.json.gz',...WSET.meta.pinChapters.map(c=>`pins/${c}.json.gz`)].map(f=>WSET.path+f):[])];
     const bar=$('#stProg');bar.classList.remove('hidden');let n=0;$('#stOffline').disabled=true;
     for(const f of files){try{await fetchData(f)}catch(e){st('Failed: '+esc(e.message));break}bar.firstChild.style.width=(++n/files.length*100)+'%'}
     $('#stOffline').textContent=n===files.length?'✔ Data stored on this device':'Retry download';$('#stOffline').disabled=false;
@@ -2921,7 +2971,8 @@ async function showWire(w){
   }catch(e){$('#modalBody').innerHTML=`<div class="errbox">${esc(e.message)}</div>`}
 }
 async function doWiring(){
-  const q=$('#wQuery').value.trim();if(!q||!DATA.ready||!DATA.manifest.wiring)return;const mode=$('#wMode').value;
+  const q=$('#wQuery').value.trim();if(!q||!DATA.ready||!DATA.manifest.wiring)return;
+  try{await useWiringFor(curSn())}catch(e){$('#wResults').innerHTML=`<div class="errbox">${esc(e.message)}</div>`;return}const mode=$('#wMode').value;
   if(mode==='pins'){showPins(q.toUpperCase());return}
   if(mode==='wire'){showWire(q.toUpperCase());return}
   $('#wResults').innerHTML='<div class="hint">Searching…</div>';
@@ -2932,7 +2983,9 @@ async function doWiring(){
   }catch(e){$('#wResults').innerHTML=`<div class="errbox">${esc(e.message)}</div>`}
 }
 renderRecentTab();
-$('#wGo').onclick=doWiring;$('#wQuery').addEventListener('keydown',e=>{if(e.key==='Enter')doWiring()});
+$('#wGo').onclick=doWiring;
+// the Wiring tab's serial and the case form's serial are one value
+{const a=$('#fSn'),b=$('#wSn');if(a&&b){a.addEventListener('input',()=>{b.value=a.value;useWiringFor(curSn()).catch(()=>{})});b.addEventListener('input',()=>{a.value=b.value;useWiringFor(curSn()).catch(()=>{})})}}$('#wQuery').addEventListener('keydown',e=>{if(e.key==='Enter')doWiring()});
 
 /* ═════════════════ AIRCRAFT PICKER (types listed in the data set's fleet.json) ═════════════════ */
 function openFleet(){
