@@ -494,7 +494,12 @@ body.melonly .tab[data-tab=describe],body.melonly .tab[data-tab=search],body.mel
 .fleetlist .s{font-size:12.5px;color:var(--text-dim);margin-top:2px}
 .fleetlist .cur{margin-left:auto;color:var(--cyan)}
 .fleetlist .tails{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 8px 56px}
-.fleetlist .tails button{font-family:var(--sans);font-weight:500;font-size:13px;border:1px solid var(--border2);background:none;color:var(--text);border-radius:8px;padding:4px 10px;cursor:pointer}
+.fleetlist .tails .tc{display:inline-flex;align-items:stretch;border:1px solid var(--border2);border-radius:8px;overflow:hidden}
+.fleetlist .tails .tc button{font-family:var(--sans);font-weight:500;font-size:13px;border:none;background:none;color:var(--text);padding:4px 10px;cursor:pointer}
+.fleetlist .tails .tc .rm{padding:0 6px;border-left:1px solid var(--border2);color:var(--text-dim);display:flex;align-items:center}
+.fleetlist .tails .tc .rm .ms{font-size:16px}
+.fleetundo{display:flex;align-items:center;gap:10px;background:var(--tonal);color:var(--on-tonal);border-radius:12px;padding:8px 10px 8px 14px;margin-top:10px;font-size:13.5px}
+.fleetundo button{margin-left:auto}
 /* photos */
 .phrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 .phrow:empty{display:none}
@@ -3296,25 +3301,34 @@ $('#wGo').onclick=doWiring;
 {const a=$('#fSn'),b=$('#wSn');if(a&&b){a.addEventListener('input',()=>{b.value=a.value;useWiringFor(curSn()).catch(()=>{})});b.addEventListener('input',()=>{a.value=b.value;useWiringFor(curSn()).catch(()=>{})})}}$('#wQuery').addEventListener('keydown',e=>{if(e.key==='Enter')doWiring()});
 
 /* ═════════════════ AIRCRAFT PICKER (types listed in the data set's fleet.json) ═════════════════ */
-function openFleet(){
+// tails removed from the picker: {<type storage prefix>: {REG: time removed}}; a tail comes back when a case for it is saved after that
+const HID_KEY='avio_hidden_tails';
+function openFleet(undo){
   const E=fleetEntries();if(!E.length){openSettings();return}
   const rd=k=>{try{return JSON.parse(localStorage.getItem(k)||'null')}catch(e){return null}};
-  const tailsFor=e=>{const P=pfxFor(e.src.id,e.t.id),set=new Map();
-    for(const c of rd(P+'_cases')||[]){const r=c&&c.form&&String(c.form.reg||'').toUpperCase();if(r&&!set.has(r))set.set(r,c.form.sn||'')}return set};
+  const hidden=()=>store.get(HID_KEY,{});
+  const tailsFor=e=>{const P=pfxFor(e.src.id,e.t.id),set=new Map(),hid=hidden()[P]||{};
+    const cases=(rd(P+'_cases')||[]).filter(c=>c&&c.form&&c.form.reg);
+    const ok=r=>!hid[r]||cases.some(c=>String(c.form.reg).toUpperCase()===r&&(c.updated||0)>hid[r]);
+    for(const c of cases){const r=String(c.form.reg).toUpperCase();if(!set.has(r)&&ok(r))set.set(r,c.form.sn||'')}return set};
+  const removeTail=(e,reg)=>{const h=hidden(),P=pfxFor(e.src.id,e.t.id);(h[P]=h[P]||{})[reg]=Date.now();store.set(HID_KEY,h)};
+  const undoRemove=(e,reg)=>{const h=hidden(),P=pfxFor(e.src.id,e.t.id);if(h[P]){delete h[P][reg];store.set(HID_KEY,h)}};
   const isCur=e=>e.src.id===cfg.active&&((FC&&FC.id)||null)===e.t.id;
   const go=(e,reg,sn)=>{try{cfg.active=e.src.id;applySource();saveCfg();localStorage.setItem('avio_ac',JSON.stringify({src:e.src.id,type:e.t.id}));if(reg)localStorage.setItem(pfxFor(e.src.id,e.t.id)+'_pendingtail',JSON.stringify({reg,sn:sn||''}))}catch(err){}location.reload()};
   const many=cfg.sources.length>1;
   const rows=E.map((e,i)=>{const tl=[...tailsFor(e)];
     return `<div class="row" data-i="${i}"><span class="ico"><span class="ms">flight</span></span><div><div class="t">${esc(e.t.name||e.t.id||'Aircraft')}</div><div class="s">${esc(e.t.full||'')}${e.t.mode==='mel'?' · MEL only':''}${many&&!e.t.pending?' · '+esc(srcLabel(e.src)):''}${tl.length?' · '+tl.length+' tail'+(tl.length>1?'s':''):''}</div></div>${isCur(e)?'<span class="ms cur">check_circle</span>':''}</div>
-      ${tl.length?`<div class="tails">${tl.slice(0,12).map(([r,sn])=>`<button data-i="${i}" data-reg="${esc(r)}" data-sn="${esc(sn)}">${esc(r)}</button>`).join('')}</div>`:''}`}).join('');
-  showModal('Aircraft',`<div class="kv">Pick the aircraft, or tap a tail number to open it with that registration filled in. Each aircraft type keeps its own cases.</div><div class="fleetlist">${rows}</div><button class="btn2 small" id="flManage" style="margin-top:10px">＋ Add or Manage Data Connections</button>`);
+      ${tl.length?`<div class="tails">${tl.slice(0,12).map(([r,sn])=>`<span class="tc"><button data-i="${i}" data-reg="${esc(r)}" data-sn="${esc(sn)}">${esc(r)}</button><button class="rm" data-i="${i}" data-rm="${esc(r)}" title="Remove ${esc(r)} from this list" aria-label="Remove ${esc(r)} from this list"><span class="ms">close</span></button></span>`).join('')}</div>`:''}`}).join('');
+  showModal('Aircraft',`<div class="kv">Pick the aircraft, or tap a tail number to open it with that registration filled in. Tap × to remove a tail from this list (its saved cases stay). Each aircraft type keeps its own cases.</div><div class="fleetlist">${rows}</div>${undo?`<div class="fleetundo"><span>${esc(undo.reg)} removed from the ${esc(undo.e.t.name||'aircraft')} list.</span><button class="btn2 small" id="fleetUndo">Undo</button></div>`:''}<button class="btn2 small" id="flManage" style="margin-top:10px">＋ Add or Manage Data Connections</button>`);
+  const ub=$('#fleetUndo');if(ub)ub.onclick=()=>{undoRemove(undo.e,undo.reg);openFleet()};
+  $$('.fleetlist .tails .rm').forEach(btn=>btn.onclick=ev=>{ev.stopPropagation();const e=E[+btn.dataset.i];removeTail(e,btn.dataset.rm);openFleet({e,reg:btn.dataset.rm})});
   $$('.fleetlist .row').forEach(el=>el.onclick=()=>{const e=E[+el.dataset.i];if(isCur(e)){hideModal();return}go(e)});
-  $$('.fleetlist .tails button').forEach(btn=>btn.onclick=()=>{const e=E[+btn.dataset.i];
-    if(isCur(e)){hideModal();const r=$('#fReg'),sn=$('#fSn');if(r)r.value=btn.dataset.reg;if(sn&&btn.dataset.sn)sn.value=btn.dataset.sn;return}
+  $$('.fleetlist .tails button[data-reg]').forEach(btn=>btn.onclick=()=>{const e=E[+btn.dataset.i];
+    if(isCur(e)){hideModal();const r=$('#fReg'),sn=$('#fSn');if(r)r.value=btn.dataset.reg;if(sn&&btn.dataset.sn){sn.value=btn.dataset.sn;sn.dispatchEvent(new Event('input'))}return}
     go(e,btn.dataset.reg,btn.dataset.sn)});
   $('#flManage').onclick=()=>{openSettings();const sel=$('#stSrc');if(sel){sel.value='__new';sel.dispatchEvent(new Event('change'))}};
 }
-$('#fleetPick').onclick=openFleet;
+$('#fleetPick').onclick=()=>openFleet();
 
 /* ═════════════════ BOOT ═════════════════ */
 (async function boot(){
