@@ -529,6 +529,8 @@ body.melonly .tab[data-tab=describe],body.melonly .tab[data-tab=search],body.mel
 .brief .bhead{font-size:17px;font-weight:600;margin:6px 0 2px}
 .brief .bmeta{font-size:12.5px;color:var(--text-dim)}
 #composer.closedcase textarea,#composer.closedcase .camb{opacity:.45;pointer-events:none}
+.ptable .sub{font-size:11.5px;color:var(--text-dim);margin-top:2px}
+.ptable .sub .dlink{padding:1px 7px;font-size:11px;border-radius:6px;margin:2px 0 0;display:inline-block;line-height:1.5}
 </style>
 </head>
 <body>
@@ -962,6 +964,10 @@ function useWiringFor(sn){
   return WSET_P;
 }
 // the wiring package in use, for the technician and in every wiring tool result
+function effNote(sn,hidden){
+  if(!hasEff())return undefined;
+  return isNaN(sn)?'No aircraft serial number given: rows for every serial are shown, each with its effectivity. Ask for the serial number before relying on a pin or wire.'
+    :`Filtered to rows effective for aircraft s/n ${sn}${hidden?` (${hidden} row${hidden>1?'s':''} for other serials hidden)`:''}.`}
 function wsetLine(sn){
   if(!wsets().length)return '';
   const S=wsets(),all=`s/n ${S[0].from}–${S[S.length-1].to}`,def=(PROFILE.wiring&&PROFILE.wiring.defaultEffectivity)||'the default wiring package';
@@ -981,6 +987,8 @@ async function loadPins(ch){
 function pinChapters(){return (WSET&&WSET.meta&&WSET.meta.pinChapters)||DATA.manifest.wiring?.pinChapters||[]}
 async function allPins(){const out=[];for(const ch of pinChapters()){const p=await loadPins(ch);if(p)out.push(p)}return out}
 function diagRef(sys,dia){
+  if(typeof sys==='number'){const d=DATA.catalog[sys];if(!d)return {system:String(sys),sheet:String(dia)};
+    return {system:d.c||d.m,sheet:'p'+dia,title:d.title,type:d.type,doc_id:d.id,pdf_page:dia,cite:citeFor(d,dia,''),page_ref:true}}
   const d=DATA.wsys.get(sys);if(!d)return {system:sys,sheet:dia};
   const i=(d.dia||[]).indexOf(dia);const page=i>=0?i+1:1;
   return {system:sys,sheet:dia,title:d.title,doc_id:d.id,pdf_page:page,cite:`${d.c} sh ${dia}`};
@@ -1001,9 +1009,20 @@ async function findComponents(q,{ata_prefix,max=25}={}){
   const m=new Map();for(const [,c] of out){const k=c[0]+'|'+c[1]+'|'+c[3];if(!m.has(k))m.set(k,[...c.slice(0,7),[...c[7]]]);else{const e=m.get(k);for(const x of c[7])if(!e[7].some(y=>y[0]===x[0]&&y[1]===x[1]))e[7].push(x)}}
   return [...m.values()].slice(0,max);
 }
-const PCOLS=['cavity','signal','wire','wire_pn','gauge_csa','color','length','mate_pin','mate_connector','terminal_pn'];
-function pinObj(r){const o={};PCOLS.forEach((k,i)=>{if(r[i]&&r[i]!=='0.0'&&r[i]!=='Not Applicable')o[k]=r[i]});return o}
-async function connectorPins(name,{harness,filter}={}){
+/* pin rows: column names from profile.wiring.pinColumns (default below). Optional columns: "effectivity" (serial ranges, e.g.
+   "5001 - 9999"), "doc" + "page" (where the row is in the manual), "far_end_item", "remarks". */
+const PCOLS0=['cavity','signal','wire','wire_pn','gauge_csa','color','length','mate_pin','mate_connector','terminal_pn'];
+const PCOLS=()=>(PROFILE.wiring&&PROFILE.wiring.pinColumns)||PCOLS0;
+const pcol=(r,k)=>{const i=PCOLS().indexOf(k);return i>=0?r[i]:undefined};
+const PIN_HIDE=new Set(['doc','page']);
+function pinObj(r){const o={};PCOLS().forEach((k,i)=>{if(!PIN_HIDE.has(k)&&r[i]!=null&&r[i]!==''&&r[i]!=='0.0'&&r[i]!=='Not Applicable')o[k]=r[i]});
+  const d=pcol(r,'doc'),pg=pcol(r,'page');if(d!=null&&DATA.catalog[d]){o.source=citeFor(DATA.catalog[d],pg,'');registerSource({cite:o.source,doc_id:d,pdf_page:pg})}return o}
+const hasEff=()=>PCOLS().includes('effectivity');
+// a row applies to serial sn when any range in its effectivity contains it (rows without effectivity always apply)
+function effOk(eff,sn){if(!sn||!eff)return true;return String(eff).split(/[,;]/).some(p=>{const m=p.match(/(\d{3,})\s*(?:-|–|thru|to)\s*(\d{3,})/i);if(m)return sn>=+m[1]&&sn<=+m[2];const one=p.match(/(\d{3,})/);return one?sn===+one[1]:true})}
+const effShort=e=>String(e||'').replace(/\s*-\s*/g,'–').replace(/–9999\b/g,'–on');
+function effSn(){const n=snNum(curSn());return isNaN(n)?null:n}
+async function connectorPins(name,{harness,filter,sn}={}){
   const N=String(name||'').trim().toUpperCase();if(!N)return [];
   const comps=await loadComps();
   const chs=[...new Set(comps.filter(c=>c[0].toUpperCase()===N).map(c=>(c[5]||'00').slice(0,2)))];
@@ -1011,14 +1030,20 @@ async function connectorPins(name,{harness,filter}={}){
   for(const ch of chs){const p=await loadPins(ch);if(p)for(const k in p){const [n,h]=k.split('|');if(n.toUpperCase()===N&&(!harness||h===harness))tables.push({connector:n,harness:h,rows:p[k]})}}
   if(!tables.length)for(const p of await allPins())for(const k in p){const [n,h]=k.split('|');if(n.toUpperCase()===N&&(!harness||h===harness))tables.push({connector:n,harness:h,rows:p[k]})}
   if(filter){const f=String(filter).toUpperCase();tables=tables.map(t=>({...t,rows:t.rows.filter(r=>r.join(' ').toUpperCase().includes(f))}))}
+  if(sn&&hasEff())tables=tables.map(t=>{const rows=t.rows.filter(r=>effOk(pcol(r,'effectivity'),sn));return {...t,rows,hidden:t.rows.length-rows.length}});
   return tables;
 }
-async function traceWire(w){
+async function traceWire(w,{sn}={}){
   const q=String(w||'').replace(/\s+/g,'').toUpperCase();if(q.length<3)return [];
   const seen=new Set(),out=[];
   for(const p of await allPins())for(const k in p){const conn=k.split('|')[0];for(const r of p[k]){const wn=(r[2]||'').replace(/\s+/g,'').toUpperCase();if(!wn.startsWith(q))continue;
-    const a=`${conn}-${r[0]}`,b=`${r[8]}-${r[7]}`,key=[r[2],...[a,b].sort()].join('|');if(seen.has(key))continue;seen.add(key);
-    out.push({wire:r[2],end1:a,end2:b,signal:r[1]||undefined,wire_pn:r[3]||undefined,color:r[5]&&r[5]!=='Not Applicable'?r[5]:undefined});if(out.length>=60)return out}}
+    const eff=pcol(r,'effectivity');if(sn&&!effOk(eff,sn))continue;
+    const mc=pcol(r,'mate_connector'),mp=pcol(r,'mate_pin');
+    const a=`${conn}-${r[0]||'?'}`,b=mc?`${mc}-${mp||'?'}`:'(not connected)',key=[r[2],...[a,b].sort(),eff||''].join('|');if(seen.has(key))continue;seen.add(key);
+    const col=pcol(r,'color'),d=pcol(r,'doc'),pg=pcol(r,'page');
+    const x={wire:r[2],end1:a,end2:b,signal:pcol(r,'signal')||undefined,wire_pn:pcol(r,'wire_pn')||pcol(r,'cable')||undefined,gauge:pcol(r,'gauge_awg')||undefined,color:col&&col!=='Not Applicable'?col:undefined,effectivity:eff||undefined,remarks:pcol(r,'remarks')||undefined};
+    if(d!=null&&DATA.catalog[d]){x.source=citeFor(DATA.catalog[d],pg,'');x.doc_id=d;x.pdf_page=pg;registerSource({cite:x.source,doc_id:d,pdf_page:pg})}
+    out.push(x);if(out.length>=(sn?120:200))return out}}
   return out;
 }
 async function loadShard(k){
@@ -1323,13 +1348,13 @@ async function runTool(name,input){
       return {summary:`${r.length} component${r.length===1?'':'s'}`,data:{wiring_effectivity:eff,matches:r}};
     }
     if(name==='get_connector_pins'){const eff=wsetLine((CASE&&CASE.form&&CASE.form.sn)||'')||undefined;
-      const t=await connectorPins(input.connector,{filter:input.filter});
+      const sn=hasEff()?snNum((CASE&&CASE.form&&CASE.form.sn)||''):NaN;const t=await connectorPins(input.connector,{filter:input.filter,sn:isNaN(sn)?null:sn});
       if(!t.length)return {summary:'not found',data:{error:`No pin table for "${input.connector}". Check the exact designator with find_component (devices connect through connectors such as plugs / jacks with their own designators).`}};
-      return {summary:`${t.map(x=>x.connector).join(', ')} · ${t.reduce((a,x)=>a+x.rows.length,0)} pins`,data:{wiring_effectivity:eff,tables:t.map(x=>({connector:x.connector,harness:x.harness,pins:x.rows.slice(0,140).map(pinObj),truncated:x.rows.length>140||undefined})),cite_as:`${WCODE} ${input.connector} pin-out`}};
+      return {summary:`${t.map(x=>x.connector).join(', ')} · ${t.reduce((a,x)=>a+x.rows.length,0)} pins`,data:{wiring_effectivity:eff||effNote(sn,t.reduce((a,x)=>a+(x.hidden||0),0)),tables:t.map(x=>({connector:x.connector,harness:x.harness,pins:x.rows.slice(0,140).map(pinObj),truncated:x.rows.length>140||undefined})),cite_as:`${WCODE} ${input.connector} pin-out`}};
     }
     if(name==='trace_wire'){const eff=wsetLine((CASE&&CASE.form&&CASE.form.sn)||'')||undefined;
-      const r=await traceWire(input.wire);
-      return {summary:`${r.length} segment${r.length===1?'':'s'}`,data:{wiring_effectivity:eff,segments:r,cite_as:`${WCODE} wire ${input.wire}`}};
+      const sn=hasEff()?snNum((CASE&&CASE.form&&CASE.form.sn)||''):NaN;const r=await traceWire(input.wire,{sn:isNaN(sn)?null:sn});
+      return {summary:`${r.length} segment${r.length===1?'':'s'}`,data:{wiring_effectivity:eff||effNote(sn),segments:r,cite_as:`${WCODE} wire ${input.wire}`}};
     }
     throw new Error('Unknown tool '+name);
   }catch(e){return {summary:'error',error:true,data:{error:String(e.message||e)}}}
@@ -2057,6 +2082,11 @@ function linkXrefs(svg,cur){
   });
   return n;
 }
+function hlPageText(text,hl){
+  let h=esc(text);const terms=[...new Set((hl||[]).map(x=>String(x.t||'').trim()).filter(t=>t.length>=2))].sort((a,b)=>b.length-a.length);
+  for(const t of terms)h=h.replace(new RegExp('(^|[^A-Za-z0-9])('+escRx(esc(t))+')(?![A-Za-z0-9])','g'),'$1<mark>$2</mark>');
+  return h;
+}
 async function openPage(docId,page,opt={}){
   if(DATA.catalog[docId]&&DATA.catalog[docId].wset&&!WSET)return showModal('Wiring','<div class="errbox">This drawing belongs to another serial range. Enter the aircraft serial number to open it.</div>');
   if(opt.back&&!opt.noPush&&window._curPage)NAV.push(window._curPage);
@@ -2155,7 +2185,9 @@ async function openPage(docId,page,opt={}){
   } else {
     const local=PROFILE.localRoot?`${PROFILE.localRoot}${String(d.path||'').replace(/\//g,'\\')}`:String(d.path||'');
     showModal(pg.cite,`<div class="kv"><b>${esc(d.m)} — ${esc(d.title)}</b><br>${esc(d.type||'')} · ATA ${esc(d.ata||'—')} · page ${page} of ${d.pages}${d.rev?' · '+esc(dmyStr(d.rev)):''}${local?`<br>PDF: <span style="font-family:var(--mono);font-size:12px">${esc(local)}</span> (page ${page})`:''}</div>
-     ${nav}</div><div class="pagetext">${esc(pg.text)}</div>`);
+     ${nav}</div>${(opt.hl||[]).length?'<div class="hlnote" id="hlNote"></div>':''}<div class="pagetext">${hlPageText(pg.text,opt.hl)}</div>`);
+    {const ms=$$('#modalBody .pagetext mark');const n=$('#hlNote');if(n){const want=[...new Set((opt.hl||[]).map(x=>x.t))].join(', ');n.innerHTML=ms.length?`Highlighted: <b>${esc(want)}</b> · ${ms.length} place${ms.length>1?'s':''}`:`<b>${esc(want)}</b> isn't on this page. Try Prev / Next.`}
+      if(ms[0])requestAnimationFrame(()=>ms[0].scrollIntoView({block:'center'}))}
   }
   $('#pgPrev').onclick=()=>openPage(docId,page-1,{...opt,noPush:true});$('#pgNext').onclick=()=>openPage(docId,page+1,{...opt,noPush:true});
   const pb=$('#pgBack');if(pb)pb.onclick=()=>{const p=NAV.pop();if(p)openPage(p.docId,p.page,{...p.opt,noPush:true,back:false,keep:true})};
@@ -3305,37 +3337,47 @@ async function doSearch(){
 $('#sGo').onclick=doSearch;$('#sQuery').addEventListener('keydown',e=>{if(e.key==='Enter')doSearch()});
 
 /* ═════════════════ WIRING LOOKUP (no AI) ═════════════════ */
-function diagLinks(ds,hl){const h=hl?` data-hl="${esc(JSON.stringify(hl))}"`:'';return (ds||[]).map(x=>x.doc_id!=null?`<span class="dlink" data-d="${x.doc_id}" data-p="${x.pdf_page}"${h}>${esc(x.system)} sh ${esc(x.sheet)}</span>`:`<span class="dlink" style="opacity:.5">${esc(x.system)} ${esc(x.sheet)}</span>`).join('')}
+function diagLinks(ds,hl){const h=hl?` data-hl="${esc(JSON.stringify(hl))}"`:'';return (ds||[]).map(x=>x.doc_id!=null?`<span class="dlink" data-d="${x.doc_id}" data-p="${x.pdf_page}"${h}>${esc(x.page_ref?x.cite:x.system+' sh '+x.sheet)}</span>`:`<span class="dlink" style="opacity:.5">${esc(x.system)} ${esc(x.sheet)}</span>`).join('')}
 async function openWireOnSheet(conn,wire){
   // open the first schematic sheet of a connector with the connector + wire highlighted
   const c=(await findComponents(conn,{max:5})).find(x=>x[0].toUpperCase()===String(conn).toUpperCase());
-  const d=c?compObj(c).diagrams.find(x=>x.doc_id!=null):null;
+  const d=c?compObj(c).diagrams.find(x=>x.doc_id!=null&&!x.page_ref)||compObj(c).diagrams.find(x=>x.doc_id!=null):null;
   if(!d){showModal('Schematic',`<div class="kv">No schematic sheet is linked to ${esc(conn)}.</div>`);return}
   openPage(d.doc_id,d.pdf_page,{hl:[{t:conn,kind:'comp'},...(wire?[{t:wire,kind:'wire'}]:[])]});
 }
 function bindDiag(root){root.querySelectorAll('.dlink[data-d]').forEach(el=>el.onclick=e=>{e.stopPropagation();let hl=[];try{hl=JSON.parse(el.dataset.hl||'[]')}catch(_){}openPage(+el.dataset.d,+el.dataset.p,{hl})});
-  root.querySelectorAll('[data-wire]').forEach(el=>el.onclick=e=>{e.stopPropagation();openWireOnSheet(el.dataset.conn,el.dataset.wire)});root.querySelectorAll('[data-pins]').forEach(el=>el.onclick=e=>{e.stopPropagation();showPins(el.dataset.pins)})}
-function pinsHtml(tables){
-  return tables.map(t=>`<div class="kv" style="margin:12px 0 6px"><b>${esc(t.connector)}</b> · harness ${esc(t.harness||'—')} · ${t.rows.length} cavities</div>
-   <div class="pwrap"><table class="ptable"><tr><th>Pin</th><th>Wire</th><th>Signal</th><th>Color</th><th>Far end</th><th>Wire P/N</th></tr>${t.rows.map(r=>`<tr><td>${esc(r[0])}</td>${r[2]?`<td class="wirecell" data-conn="${esc(t.connector)}" data-wire="${esc(r[2])}">${esc(r[2])}</td>`:'<td>—</td>'}<td>${esc(r[1]||'')}</td><td>${esc(r[5]&&r[5]!=='Not Applicable'?r[5]:'')}</td><td class="mate" data-pins="${esc(r[8]||'')}">${r[8]?esc(r[8]+'-'+r[7]):''}</td><td>${esc(r[3]||'')}</td></tr>`).join('')}</table></div>`).join('');
+  root.querySelectorAll('[data-wire]').forEach(el=>el.onclick=e=>{e.stopPropagation();if(el.dataset.trace||hasEff())showWire(el.dataset.wire);else openWireOnSheet(el.dataset.conn,el.dataset.wire)});root.querySelectorAll('[data-pins]').forEach(el=>el.onclick=e=>{e.stopPropagation();showPins(el.dataset.pins)})}
+function effBar(hidden,again){
+  if(!hasEff())return '';const sn=effSn();
+  return `<div class="hint" style="margin:8px 0 6px">${sn?`Showing wiring effective for <b>s/n ${sn}</b>.${hidden?` ${hidden} row${hidden>1?'s':''} for other serials hidden · <a href="#" class="effAll">Show all</a>`:''}`:'Enter the aircraft serial number to show only the wiring effective for it.'}</div>`;
 }
-async function showPins(name){
+function pinsHtml(tables){
+  const E=hasEff(),D=PCOLS().includes('doc');
+  return tables.map(t=>`<div class="kv" style="margin:12px 0 6px"><b>${esc(t.connector)}</b>${t.harness?' · harness '+esc(t.harness):''} · ${t.rows.length} row${t.rows.length===1?'':'s'}</div>
+   <div class="pwrap"><table class="ptable"><tr><th>Pin</th><th>Wire</th>${E?'':'<th>Signal</th><th>Color</th>'}<th>Far end</th>${E?'<th>S/N</th>':'<th>Wire P/N</th>'}</tr>${t.rows.map(r=>{
+     const w=r[2],mc=pcol(r,'mate_connector'),mp=pcol(r,'mate_pin'),it=pcol(r,'far_end_item'),cab=pcol(r,'cable')||'',d=pcol(r,'doc'),pg=pcol(r,'page');
+     const src=D&&d!=null&&DATA.catalog[d]?`<div class="sub"><span class="dlink" data-d="${d}" data-p="${pg}" data-hl="${esc(JSON.stringify([{t:t.connector,kind:'comp'},...(w?[{t:w,kind:'wire'}]:[])]))}" title="${esc(citeFor(DATA.catalog[d],pg,''))}">${esc((DATA.catalog[d].ata||'')+' p'+pg)}</span></div>`:'';
+     return `<tr><td>${esc(r[0]||'—')}</td>${w?`<td><span class="wirecell" data-conn="${esc(t.connector)}" data-wire="${esc(w)}"${E?' data-trace="1"':''}>${esc(w)}</span>${cab?`<div class="sub">${esc(cab)}</div>`:''}${src}</td>`:'<td>—</td>'}${E?'':`<td>${esc(pcol(r,'signal')||'')}</td><td>${esc((c=>c&&c!=='Not Applicable'?c:'')(pcol(r,'color')))}</td>`}<td class="mate" data-pins="${esc(mc||'')}">${mc?esc(mc+'-'+(mp||'?')):''}${it?`<div class="sub">${esc(it)}</div>`:''}</td>${E?`<td>${esc(effShort(pcol(r,'effectivity')))}</td>`:`<td>${esc(pcol(r,'wire_pn')||'')}</td>`}</tr>`}).join('')}</table></div>`).join('');
+}
+async function showPins(name,all){
   if(!name)return;
   showModal(`${WCODE} ${name} pin-out`,'<div class="hint">Loading…</div>');
   try{
-    const [t,c]=await Promise.all([connectorPins(name),findComponents(name,{max:3})]);
-    const comp=c.find(x=>x[0].toUpperCase()===name.toUpperCase());
-    $('#modalBody').innerHTML=(comp?`<div class="kv"><b>${esc(comp[0])}</b> · ${esc(CTYPE[comp[1]]||'')} · ${esc(comp[4]||'')}<br>P/N ${esc(comp[2]||'—')} · ATA ${esc(comp[5]||'—')}<br>${diagLinks(compObj(comp).diagrams,[{t:comp[0],kind:'comp'}])}</div>`:'')+
-      (t.length?pinsHtml(t)+'<div class="hint">Tap a wire to see it highlighted on the schematic, or a far-end connector to open its pin-out.</div>':'<div class="errbox">No pin table for this designator. Devices connect through connectors (plugs / jacks) with their own designators.</div>');
-    bindDiag($('#modalBody'));
+    const sn=all?null:effSn();
+    const [t,c]=await Promise.all([connectorPins(name,{sn}),findComponents(name,{max:3})]);
+    const comp=c.find(x=>x[0].toUpperCase()===name.toUpperCase());const hidden=t.reduce((a,x)=>a+(x.hidden||0),0);
+    $('#modalBody').innerHTML=(comp?`<div class="kv"><b>${esc(comp[0])}</b> · ${esc(CTYPE[comp[1]]||'')} · ${esc(comp[4]||'')}<br>${comp[2]?'P/N '+esc(comp[2])+' · ':''}ATA ${esc(comp[5]||'—')}<br>${diagLinks(compObj(comp).diagrams.slice(0,8),[{t:comp[0],kind:'comp'}])}</div>`:'')+
+      (t.length?effBar(hidden)+pinsHtml(t)+`<div class="hint">${hasEff()?'Tap a wire to trace it end to end, a far end to open its pin-out, or a page to read it in the manual.':'Tap a wire to see it highlighted on the schematic, or a far-end connector to open its pin-out.'}</div>`:'<div class="errbox">No pin table for this designator. Devices connect through connectors (plugs / jacks) with their own designators.</div>');
+    bindDiag($('#modalBody'));const ea=$('#modalBody .effAll');if(ea)ea.onclick=e=>{e.preventDefault();showPins(name,true)};
   }catch(e){$('#modalBody').innerHTML=`<div class="errbox">${esc(e.message)}</div>`}
 }
-async function showWire(w){
+async function showWire(w,all){
   showModal(`${WCODE} wire ${w}`,'<div class="hint">Tracing…</div>');
   try{
-    const r=await traceWire(w);
-    $('#modalBody').innerHTML=r.length?`<div class="pwrap"><table class="ptable"><tr><th>Wire</th><th>End 1</th><th>End 2</th><th>Color</th></tr>${r.map(x=>`<tr><td class="wirecell" data-conn="${esc(x.end1.replace(/-[^-]+$/,''))}" data-wire="${esc(x.wire)}">${esc(x.wire)}</td><td class="mate" data-pins="${esc(x.end1.replace(/-[^-]+$/,''))}">${esc(x.end1)}</td><td class="mate" data-pins="${esc(x.end2.replace(/-[^-]+$/,''))}">${esc(x.end2)}</td><td>${esc(x.color||'')}</td></tr>`).join('')}</table></div><div class="hint">Each row is one segment between connector pins. Tap a wire to see it highlighted on the schematic, or a connector to see its full pin-out.</div>`:'<div class="errbox">Wire not found in the pin tables.</div>';
-    bindDiag($('#modalBody'));
+    const sn=all?null:effSn();const r=await traceWire(w,{sn});const E=hasEff();
+    let hidden=0;if(sn&&E)hidden=(await traceWire(w)).length-r.length;
+    $('#modalBody').innerHTML=r.length?`${effBar(hidden)}<div class="pwrap"><table class="ptable"><tr><th>Wire</th><th>End 1</th><th>End 2</th><th>${E?'S/N':'Color'}</th></tr>${r.map(x=>`<tr><td class="wirecell" data-conn="${esc(x.end1.replace(/-[^-]+$/,''))}" data-wire="${esc(x.wire)}">${esc(x.wire)}${x.source?`<div class="sub"><span class="dlink" data-d="${x.doc_id}" data-p="${x.pdf_page}" data-hl="${esc(JSON.stringify([{t:x.wire,kind:'wire'}]))}" title="${esc(x.source)}">${esc(((DATA.catalog[x.doc_id]||{}).ata||'')+' p'+x.pdf_page)}</span></div>`:''}</td><td class="mate" data-pins="${esc(x.end1.replace(/-[^-]+$/,''))}">${esc(x.end1)}</td><td class="mate" data-pins="${esc(x.end2.replace(/-[^-]+$/,''))}">${esc(x.end2)}</td><td>${esc(E?effShort(x.effectivity):(x.color||''))}</td></tr>`).join('')}</table></div><div class="hint">Each row is one segment between connector pins. Tap a connector to see its full pin-out${E?', or a page to read it in the manual':', or a wire to see it on the schematic'}.</div>`:`${effBar(hidden)}<div class="errbox">Wire not found in the pin tables${sn&&hidden?` for s/n ${sn}`:''}.</div>`;
+    bindDiag($('#modalBody'));const ea=$('#modalBody .effAll');if(ea)ea.onclick=e=>{e.preventDefault();showWire(w,true)};
   }catch(e){$('#modalBody').innerHTML=`<div class="errbox">${esc(e.message)}</div>`}
 }
 async function doWiring(){
