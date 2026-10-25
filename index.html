@@ -2983,7 +2983,7 @@ function openPart(id,focus){
   showModal('COMPONENT LOG ENTRY',`<div id="leWrap">
     <h3 class="amh">Component</h3>
     <div class="grid2">${sel('leCat','Category',Object.entries(LE_CAT),p.cat)}${sel('lePos','Engine position',[['','—'],['1','Engine 1 (Left)'],['2','Engine 2 (Right)']],p.pos)}</div>
-    <div class="grid2">${fld('leName','Part name',p.name,'Component name')}${fld('leTask','Task No. / Position',p.task,'As printed in the manual, or LH / RH')}</div>
+    <div class="grid2">${fld('leName','Part name',p.name,'Component name')}${fld('leTask','AMM task / position',p.task,'As printed in the manual, or LH / RH')}</div>
     <div class="field"><label>Work performed</label><textarea id="leDesc" rows="3" placeholder="<UNIT> - REMOVED AND REPLACED IAW … OPS CHECK GOOD.">${esc(p.desc||'')}</textarea></div>
     <div class="field"><label>Reason removed</label><input id="leReason" value="${esc(p.reason||'')}" placeholder="INOPERATIVE / TIME CHANGE" autocomplete="off"></div>
     <h3 class="amh">Removed</h3>
@@ -2995,14 +2995,14 @@ function openPart(id,focus){
       <div id="leScan" class="hint" style="margin-top:6px">${p.cert&&p.cert.readAt?`Read ${esc(dmyt(p.cert.readAt))}. Check every field against the certificate.`:'The AI reads the certificate and fills the fields below. Check every one.'}</div></div>
     <div class="grid2">${sel('leForm','Form',[['','—'],...LE_FORMS.map(x=>[x,x])],p.cert.form)}${fld('leTrk','Form tracking no.',p.cert.trk)}</div>
     <div class="grid2"><div class="field"><label>Status / work (block 11)</label><input id="leStatus" list="leStatusL" value="${esc(p.cert.status||'')}" autocomplete="off"><datalist id="leStatusL">${LE_STATUS.map(s=>`<option value="${s}">`).join('')}</datalist></div>${fld('leCertDate','Certificate date',p.cert.date,'DD MMM YYYY')}</div>
-    <div class="grid2">${fld('leOrg','Approved organization',p.cert.org)}${fld('leRemarks','Remarks (block 12)',p.cert.remarks)}</div>
     <h3 class="amh">Installed Part Times</h3>
     <div class="grid2">${sel('leTdes','Designation',[['','—'],...Object.entries(LE_TDES)],p.tdes)}${fld('leInst','Install date',p.inst,'','type="date"')}</div>
     <div class="grid3">${fld('lePMos','Months',p.mos,'0','inputmode="numeric"')}${fld('lePHrs','Hours',p.hrs,'0','inputmode="decimal"')}${fld('lePCyc','<span id="leCycL">Cycles</span>',p.cyc,'0','inputmode="numeric"')}</div>
     <div id="leTcBox" class="${p.tdes==='TC'?'':'hidden'}">${fld('leTcDate','Times continued as of',p.tcDate,'DD MMM YYYY')}</div>
     <div class="hint" id="leTimesHint" style="margin:-4px 0 10px"></div>
     <h3 class="amh">Log Entry</h3>
-    <div class="grid2">${fld('leWo','Work order #',p.wo)}${fld('leDesig','Aircraft',leDesig())}</div>
+    <div class="grid2">${fld('leTaskCode','Task code',p.taskCode,'Task No. / position on the log entry')}${fld('leWo','Work order #',p.wo)}</div>
+    <div class="grid2">${fld('leDesig','Aircraft',leDesig())}</div>
     <div class="grid2">${fld('leReg','Registration',f.reg,'N1KE','autocapitalize="characters"')}${fld('leSn','Serial number',f.sn,typeof SN_HINT!=='undefined'?SN_HINT:'')}</div>
     <details class="more" id="leTimesBox" ${TIMES_KEYS.some(k=>f[k])?'':'open'}><summary>▸ Aircraft, Engine &amp; APU Times</summary>${timesHtml('le',f)}${fld('leApuSt','APU starts',f.apuSt,'','inputmode="numeric"')}</details>
     <div class="field"><label>Log entry description</label><textarea id="leLog" rows="7">${esc(p.logEdited&&p.logText?p.logText:leItemLines(p).join('\n'))}</textarea>
@@ -3022,8 +3022,8 @@ function openPart(id,focus){
   const read=()=>{
     p.cat=g('leCat');p.pos=g('lePos');p.name=g('leName');p.task=g('leTask');p.desc=$('#leDesc').value.trim();p.reason=g('leReason');
     p.off={pn:g('leOffPn'),sn:g('leOffSn')};p.on={pn:g('leOnPn'),sn:g('leOnSn')};
-    Object.assign(p.cert,{form:g('leForm'),trk:g('leTrk'),status:g('leStatus'),date:g('leCertDate'),org:g('leOrg'),remarks:g('leRemarks')});
-    p.tdes=g('leTdes');p.inst=g('leInst');p.mos=g('lePMos');p.hrs=g('lePHrs');p.cyc=g('lePCyc');p.tcDate=g('leTcDate');p.wo=g('leWo');
+    Object.assign(p.cert,{form:g('leForm'),trk:g('leTrk'),status:g('leStatus'),date:g('leCertDate'),org:p.cert.org||'',remarks:p.cert.remarks||''});
+    p.tdes=g('leTdes');p.inst=g('leInst');p.mos=g('lePMos');p.hrs=g('lePHrs');p.cyc=g('lePCyc');p.tcDate=g('leTcDate');p.wo=g('leWo');p.taskCode=g('leTaskCode');
     p.rts={cat:g('leRtsCat'),op:g('leRtsOp')};
     f.reg=g('leReg').toUpperCase();f.sn=g('leSn');f.apuSt=g('leApuSt');Object.assign(f,ET.read());
     if(RT){
@@ -3092,7 +3092,7 @@ async function leScanCert(p,file){
     if(j.serial_number&&onSn&&nk(onSn)!==nk(j.serial_number))notes.push(`S/N on was ${onSn}; the certificate shows ${j.serial_number}.`);
     put('leOnPn',j.part_number);put('leOnSn',j.serial_number);
     const form=String(j.form||'');put('leForm',LE_FORMS.find(x=>form.toUpperCase().startsWith(x.toUpperCase()))||(form?'Other':''));
-    put('leTrk',j.tracking_no);put('leStatus',String(j.status||'').toUpperCase());put('leCertDate',j.date?dmyStr(j.date).toUpperCase():'');put('leOrg',j.organization);put('leRemarks',j.remarks);
+    put('leTrk',j.tracking_no);put('leStatus',String(j.status||'').toUpperCase());put('leCertDate',j.date?dmyStr(j.date).toUpperCase():'');p.cert.org=String(j.organization||'');p.cert.remarks=String(j.remarks||'');
     if(!$('#leName').value.trim()&&j.description)put('leName',String(j.description).replace(/\b\w+/g,w=>w.charAt(0)+w.slice(1).toLowerCase()));
     const des=leTdesFromStatus(j.status);if(des&&!$('#leTdes').value){$('#leTdes').value=des;$('#leTdes').dispatchEvent(new Event('change'))}
     if(j.tsn_hours||j.tso_hours)notes.push(`Remarks list times (${[j.tsn_hours&&'TSN '+j.tsn_hours+' hrs',j.tsn_cycles&&j.tsn_cycles+' cyc',j.tso_hours&&'TSO '+j.tso_hours+' hrs',j.tso_cycles&&j.tso_cycles+' cyc'].filter(Boolean).join(', ')}). If the part comes with time continued, set the designation to TC and enter them.`);
@@ -3141,7 +3141,7 @@ async function buildLogEntry(p,o){
   };
   header();
   let y=128;
-  const items=[{task:[p.task,p.cat==='engine'&&p.pos?'ENG '+p.pos:''].filter(Boolean).join(' / '),lines:p.logEdited&&p.logText?p.logText.split('\n'):leItemLines(p)}];
+  const items=[{task:p.taskCode||[p.task,p.cat==='engine'&&p.pos?'ENG '+p.pos:''].filter(Boolean).join(' / '),lines:p.logEdited&&p.logText?p.logText.split('\n'):leItemLines(p)}];
   items.forEach((it,n)=>{
     const rows=it.lines.flatMap(t=>wrap(t,390,7.6));const tk=wrap(it.task,145,7.6);
     const need=Math.max(rows.length,tk.length)*12.2+4;if(y+need>H-150){page=doc.addPage([W,H]);header();y=128}
