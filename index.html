@@ -160,6 +160,8 @@ details.think div{font-size:13px;color:var(--text-dim);white-space:pre-wrap;line
 .melsec.dim .melbody{color:var(--text-dim)}
 .melcites{margin:12px 0 10px;display:flex;flex-wrap:wrap;gap:6px}
 .btn.small{width:auto;padding:7px 12px;font-size:13px;font-weight:800;border-radius:8px}
+.lechks{display:flex;flex-wrap:wrap;gap:6px 14px}.lechk{display:flex!important;gap:6px;align-items:center;text-transform:none!important;letter-spacing:0!important;font-family:var(--sans)!important;font-size:13.5px!important;color:var(--text)!important;margin:0!important}.lechk input{width:auto!important}
+.lefilled{box-shadow:0 0 0 2px var(--cyan) inset}
 .amh{font-family:var(--mono);font-size:12.5px;letter-spacing:1.5px;color:var(--cyan);font-weight:400;margin:10px 0 8px;text-transform:uppercase}
 .errbox{background:var(--err-bg);border:1px solid var(--err-border);color:var(--err-text);border-radius:8px;padding:10px 12px;font-size:14px;white-space:pre-wrap}
 
@@ -1378,7 +1380,7 @@ function systemPrompt(){
   steps.push('Build a differential: list candidate causes (sensor, wiring / connector, data source, controller / LRU, power: circuit breaker or solid-state power controller, mechanical) and for each say what evidence supports or contradicts it. Rank them.');
   steps.push(`Recommend the single most discriminating next check — the test that best separates the top hypotheses, with the least effort and risk — with exact steps. For wiring checks, ${has.wiring?'use find_component, get_connector_pins and trace_wire to give real designators, pins and wire numbers, and say where the far end is':'search the wiring diagrams for real designators, pins and wire numbers'}. Give expected values and pass/fail interpretation only where the manuals state them; otherwise say what a normal result looks like and label it general knowledge.`);
   steps.push('When the technician reports results, update the differential explicitly ("this eliminates X because…") and continue until you can state a conclusion: what failed, why it produced these symptoms, the corrective action (the removal / installation task) and the required operational test / functional check after repair.');
-  if(has.mel)steps.push("Dispatch: when the technician asks about deferring, or the fault cannot be fixed before the next flight, call lookup_mel. State the relief (category, installed / required, every condition), who authorizes it under the operating rule the tool returns (MEL + LOA/OpSpec, PIC acceptance), the repair-by interval, and split the procedures by role: (M) for maintenance, (O) for the flight crew, placard for maintenance. If there is no relief, say the item must be repaired before flight. When deferral is verified as necessary (the fault won't be fixed before the next flight and the chosen relief's conditions fit this aircraft), call record_mel_deferral with the mel_id and option from lookup_mel and a log-style discrepancy entry. Do not record a deferral the technician hasn't chosen. When the technician later reports the fix is complete, call record_corrective_action with a log-style corrective action that cites the removal / installation and operational test tasks you found, and the P/N and S/N off/on exactly as the technician gave them (ask for any that are missing rather than guessing).");
+  if(has.mel)steps.push("Dispatch: when the technician asks about deferring, or the fault cannot be fixed before the next flight, call lookup_mel. State the relief (category, installed / required, every condition), who authorizes it under the operating rule the tool returns (MEL + LOA/OpSpec, PIC acceptance), the repair-by interval, and split the procedures by role: (M) for maintenance, (O) for the flight crew, placard for maintenance. If there is no relief, say the item must be repaired before flight. When deferral is verified as necessary (the fault won't be fixed before the next flight and the chosen relief's conditions fit this aircraft), call record_mel_deferral with the mel_id and option from lookup_mel and a log-style discrepancy entry. Do not record a deferral the technician hasn't chosen. When the technician later reports the fix is complete, call record_corrective_action with a log-style corrective action that cites the removal / installation and operational test tasks you found, and the P/N and S/N off/on exactly as the technician gave them (ask for any that are missing rather than guessing). Whenever the technician reports a component removed and replaced (a troubleshooting swap or the fix, even if the case stays open), call record_component_change with the part name, category (airframe / engine / APU), engine position, P/N and S/N off and on, reason removed, the removal / installation task you found copied exactly as the manual prints it (never add or remove hyphens or dots), and a log-style description; the app then prepares the component log entry and, when the operator has one set up, the repair tag. Ask the technician to photograph the replacement part's release certificate (8130-3 / Form One) in that card so its certificate data and times fill in.");
   else steps.push('When the technician reports the fix is complete, call record_corrective_action with a log-style corrective action that cites the removal / installation and operational test tasks you found, and the P/N and S/N off/on exactly as given.');
   steps.push('Use the general maintenance tasks for power-up, circuit breaker / power controller control and safe-ground setup; the parts catalog for part numbers when replacement is likely; standard wiring practices for wire / connector repair methods, when those are in the library.');
   const cx=P.citeExamples||(MANS.slice(0,3).map(c=>`[${c} 21-00-00 p3]`).join(', ')||'[AMM 21-00-00 p3]');
@@ -1842,7 +1844,8 @@ function newAiBubble(){
       toolready(b){const t=els['tool:'+b.id];if(t)t.querySelector('.tx').textContent=toolLabel(b)}
     }},
     toolDone(id,r){const t=els['tool:'+id];if(!t)return;t.classList.remove('run');if(r.error)t.classList.add('err');t.querySelector('.ic').textContent=r.error?'✖':'◆';t.querySelector('.rs').textContent=r.summary||'';t._result=r.data;
-      if(!r.error&&r.data&&r.data.recorded){const c=deferralCard();if(c){$$('#chatLog .deferralcard').forEach(x=>x.remove());t.after(c)}}},
+      if(!r.error&&r.data&&r.data.recorded){const c=deferralCard();if(c){$$('#chatLog .deferralcard').forEach(x=>x.remove());t.after(c)}}
+      if(!r.error&&r.data&&r.data.part_id&&typeof partCard==='function'){$$('#chatLog .partcard').forEach(x=>{if(x.dataset.part===r.data.part_id)x.remove()});const pc=partCard(r.data.part_id);if(pc)t.after(pc)}},
     resetPending(){},
     finish(u){typing.remove();flush();const d=document.createElement('div');d.className='usage';d.textContent=`case tokens · in ${fmtK(u.in)} · out ${fmtK(u.out)} · ${cfg.model}`;wrap.appendChild(d);autoScroll()},
     error(msg){typing.remove();flush();const d=document.createElement('div');d.className='errbox';d.textContent=msg;wrap.appendChild(d);autoScroll()}
@@ -1875,7 +1878,8 @@ function renderCase(){
         if(b.type==='text'&&b.text){const d=document.createElement('div');d.className='aitext';d.innerHTML=md(b.text);aiWrap.appendChild(d)}
         else if(b.type==='thinking'&&b.thinking){const d=document.createElement('details');d.className='think';d.innerHTML='<summary>◈ REASONING</summary><div></div>';d.querySelector('div').textContent=b.thinking;aiWrap.appendChild(d)}
         else if(b.type==='tool_use'){const tr=toolResults.get(b.id)||{summary:'',data:{}};aiWrap.appendChild(toolEl(b,tr));
-          if((b.name==='record_mel_deferral'||b.name==='record_corrective_action')&&!tr.error&&tr.data&&tr.data.recorded){const ph=document.createElement('div');ph.className='deferralslot';aiWrap.appendChild(ph)}}
+          if((b.name==='record_mel_deferral'||b.name==='record_corrective_action')&&!tr.error&&tr.data&&tr.data.recorded){const ph=document.createElement('div');ph.className='deferralslot';aiWrap.appendChild(ph)}
+          if(!tr.error&&tr.data&&tr.data.part_id&&typeof partCard==='function'&&!$$('#chatLog .partcard').some(x=>x.dataset.part===tr.data.part_id)){const pc=partCard(tr.data.part_id);if(pc)aiWrap.appendChild(pc)}}
       }
     }
   }
@@ -2813,6 +2817,7 @@ $('#btnExport').onclick=()=>{
     <button class="btn" id="exBrief" style="margin-bottom:10px">Case Brief (Short Summary)</button>
     <button class="btn2" id="exPdf" style="width:100%">Full Report PDF</button>
     <div id="exOut" style="margin-top:12px"></div>
+    <div class="field" style="margin-top:12px"><label>Component Log Entry</label><div class="hint" style="margin:0 0 8px">Remove-and-replace log entry${leTag()?" and "+esc(leTagTitle()):""}, any time during the case.</div><button class="btn" id="exParts" style="width:100%">Component Log Entry${leTag()?" / "+esc(leTagTitle()):""}${CASE.parts&&CASE.parts.length?` (${CASE.parts.length})`:""}</button></div>
     <button class="btn2" id="exMd" style="width:100%;margin-top:12px">Download Markdown (.md)</button>
     ${melOps().amdl?`<button class="btn2" id="exAmdl" style="width:100%;margin-top:12px">${esc(formTitle())} (${CASE.clearing?'Completed':CASE.deferral?'MEL Deferral':'Discrepancy'})</button>`:''}`);
   if($('#exAmdl'))$('#exAmdl').onclick=async()=>{sync();if(CASE.deferral)try{await loadMel()}catch(e){}openCaseAmdl()};
@@ -2820,6 +2825,7 @@ $('#btnExport').onclick=()=>{
   const ET=wireTimes('ex',f,()=>{Object.assign(f,ET.read());$('#exTimes').textContent=timesLine(f)||'Not entered yet. Add them here to put them on the PDF.';saveCase()});
   const sync=()=>{f.reg=$('#exReg').value.trim().toUpperCase();f.sn=$('#exSn').value.trim();Object.assign(f,ET.read());saveCase()};
   $('#exMd').onclick=()=>{sync();exportMarkdown()};
+  $('#exParts').onclick=()=>{sync();openParts()};
   $('#exBrief').onclick=()=>{sync();openBrief()};
   $('#exPdf').onclick=async()=>{
     sync();const btn=$('#exPdf');btn.disabled=true;btn.textContent='Creating PDF…';$('#exOut').innerHTML='';
@@ -2833,6 +2839,372 @@ $('#btnExport').onclick=()=>{
     }catch(e){btn.disabled=false;btn.textContent='Full Report PDF';$('#exOut').innerHTML=`<div class="errbox">${esc(e.message||String(e))}</div>`}
   };
 };
+
+/* ═════════════════ COMPONENT LOG ENTRY + REPAIR TAG (remove and replace) ═════════════════ */
+// Every remove-and-replace in a case is a component transaction (CASE.parts). Each one gives:
+//  • a log entry PDF: aircraft header, work order, times row, numbered item, return to service statement, signature block
+//  • the operator's repair tag form for the removed part, when operator.json configures one (logEntry.repairTag)
+// The installed part's release certificate (FAA 8130-3, TCCA Form One, EASA Form 1…) can be photographed; the AI reads it
+// and fills the fields, and the technician checks and edits every one before the PDFs are made.
+// Return to service statements, the repair tag field map and the aircraft designation all come from the operator's data set
+// (operator.json → logEntry, forms; profile.json → designation, engineModel, apuModel), never from this code.
+const LE_PERSON_KEY='avio_le_person';          // technician name, certificate, phone (every aircraft on this device)
+const LE_TAG_KEY='avio_reptag';                // customer block of the repair tag
+const LE_RTS_KEY=PFX+'_rtsop';                 // last return to service statement set picked
+const LE_DESIG_KEY=PFX+'_acdesig';             // aircraft designation typed for the log entry header
+const LE_GENERIC_RTS={id:'generic',label:'Generic (no operator statements)',
+  airframe:'The work described above was performed in accordance with current approved data, and the aircraft is approved for return to service with respect to the work performed.',
+  engine:'The work described above was performed in accordance with current approved data, and the engine is approved for return to service with respect to the work performed.',
+  apu:'The work described above was performed in accordance with current approved data, and the APU is approved for return to service with respect to the work performed.'};
+const LE_CAT={airframe:'Airframe',engine:'Engine',apu:'APU'};
+const LE_TDES={TSO:'TSO — Time Since Overhaul',TSN:'TSN — Time Since New',TSR:'TSR — Time Since Repaired / Inspected / Tested',TC:'TC — Time Continued'};
+const LE_STATUS=['NEW','OVERHAULED','REPAIRED','INSPECTED/TESTED','MODIFIED'];
+const LE_FORMS=['FAA 8130-3','TCCA Form One','EASA Form 1','Other'];
+// repair tag text fields the app can fill: key → label in the app (operator.json maps each key to the PDF form field name)
+const LE_TAG_TEXT=[['repairStation','Repair station number'],['qty','Quantity'],['po','Customer PO'],['custCode','Customer code'],['company','Customer company'],['contact','Customer contact'],['phone','Customer phone'],['email','Customer email'],
+  ['mfgDate','Manufacture date (removed part)'],['tsn','Time since new'],['csn','Cycles since new'],['ysn','Yrs / mths since new'],['tso','Time since OH / res'],['cso','Cycles since OH / res'],['yso','Yrs / mths since OH'],['totalLife','Total life yrs / mths'],['installedLife','Installed life yrs / mths'],
+  ['engModel','Engine / APU model'],['engSn','Engine / APU S/N'],['code1','Fault code'],['code2','Fault code'],['time','Time of failure'],['alt','Cruise altitude'],['fim','Fault isolation section used'],['diagSession','Diagnostics session #'],['pocPhone','Point of contact phone'],
+  ['returnDate','Requested return date'],['shipTo','Ship to address'],['carrier','Carrier'],['acct','Carrier account #'],['shipInst','Shipping instructions']];
+const LE_TAG_REMEMBER=['repairStation','custCode','company','contact','phone','email','shipTo','carrier','acct'];
+const leTypeName=()=>APPNAME;
+const leUnit=cat=>cat==='engine'?'ENC':cat==='apu'?'STARTS':'AFL';
+const leCfg=()=>(OPERATOR&&OPERATOR.logEntry)||{};
+function leStatements(){const L=(leCfg().statements||[]).filter(s=>s&&s.id);return L.length?L:[LE_GENERIC_RTS]}
+function leStatement(id){const L=leStatements();return L.find(s=>s.id===id)||L[0]}
+function leRtsDefault(){const L=leStatements(),s=store.get(LE_RTS_KEY,null);if(s&&L.some(x=>x.id===s))return s;const d=leCfg().defaultStatement||{};const v=d[cfg.melOps]||d['*'];return L.some(x=>x.id===v)?v:L[0].id}
+function leTag(){const id=leCfg().repairTag;const f=id&&OPERATOR&&OPERATOR.forms?OPERATOR.forms[id]:null;return f&&f.pdf&&f.fields?f:null}
+function leTagTitle(){const t=leTag();return (t&&t.title)||'Repair Tag'}
+function leDesig(){return store.get(LE_DESIG_KEY,'')||PROFILE.designation||PROFILE.aircraft||APPNAME}
+function leTdesFromStatus(s){s=String(s||'').toUpperCase();if(/OVERHAUL/.test(s))return 'TSO';if(/\bNEW\b/.test(s))return 'TSN';if(s)return 'TSR';return ''}
+function leNewPart(o){o=o||{};
+  return {id:'pt'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),at:Date.now(),cat:o.cat||'airframe',pos:o.pos||'',task:o.task||'',name:o.name||'',desc:o.desc||'',reason:o.reason||'',
+    off:{pn:o.pn_off||'',sn:o.sn_off||''},on:{pn:o.pn_on||'',sn:o.sn_on||''},
+    tdes:'',mos:'0',hrs:'0',cyc:'0',inst:isoDay(new Date()),tcDate:'',cert:{form:'',trk:'',status:'',date:'',org:'',remarks:''},photo:'',
+    offLife:{},rts:{cat:o.cat||'airframe',op:leRtsDefault()},tag:{}}}
+function leParts(){if(!CASE)return [];if(!Array.isArray(CASE.parts))CASE.parts=[];return CASE.parts}
+function lePart(id){return leParts().find(p=>p.id===id)||null}
+// the assistant reported a remove-and-replace: add it, or fill in the matching one (same S/N, or same P/N without a S/N)
+function leUpsert(i){
+  const L=leParts();const k=s=>String(s||'').replace(/\s+/g,'').toUpperCase();
+  let p=L.find(x=>(i.sn_off&&k(x.off.sn)===k(i.sn_off))||(i.sn_on&&k(x.on.sn)===k(i.sn_on))||(i.pn_off&&k(x.off.pn)===k(i.pn_off)&&!x.off.sn)||(i.pn_on&&k(x.on.pn)===k(i.pn_on)&&!x.on.sn));
+  if(!p){p=leNewPart(i);L.push(p)}
+  const set=(o,key,v)=>{v=String(v||'').trim();if(v&&!o[key])o[key]=v};
+  set(p.off,'pn',i.pn_off);set(p.off,'sn',i.sn_off);set(p.on,'pn',i.pn_on);set(p.on,'sn',i.sn_on);
+  set(p,'name',i.part_name);set(p,'task',i.amm_task);set(p,'reason',i.reason_removed);set(p,'desc',i.description);
+  if(i.category&&LE_CAT[i.category]&&!p.catSet){p.cat=i.category;p.rts.cat=i.category}
+  if(i.engine_position&&!p.pos)p.pos=String(i.engine_position).replace(/\D/g,'').slice(0,1);
+  p.upd=Date.now();saveCase();return p;
+}
+// AI tool: a component was removed and replaced (whether or not it fixed the fault)
+const LE_TOOL={name:'record_component_change',description:"Record a component transaction (a part removed and a replacement installed) as soon as the technician reports it, whether or not it fixed the fault and even while the case stays open. The app prepares the component log entry (removed / installed P/N and S/N, reason removed, installed part times from the replacement part's release certificate) and, when the operator has one set up, the repair tag for the removed part, and offers them to the technician. Use the technician's facts only: never invent part numbers, serial numbers or times. Call it again for each additional part changed.",
+  input_schema:{type:'object',properties:{part_name:{type:'string',description:'Component name as the parts catalog / maintenance manual names it'},
+    category:{type:'string',enum:['airframe','engine','apu'],description:'airframe for airframe systems; engine for engine and engine-mounted components; apu for the APU and APU-mounted components'},
+    engine_position:{type:'string',description:'"1" (left) or "2" (right) for engine components'},
+    pn_off:{type:'string'},sn_off:{type:'string'},pn_on:{type:'string'},sn_on:{type:'string'},
+    reason_removed:{type:'string',description:'Short reason, e.g. "INOPERATIVE" or "TIME CHANGE"'},
+    amm_task:{type:'string',description:'Task number / position for the log: the removal / installation task number copied exactly as the manual prints it (do not add or remove hyphens or dots). If the procedure has no task number, give the section reference as printed and/or the position (LH, RH, NO. 1).'},
+    description:{type:'string',description:'Log-style work description in capitals, citing references exactly as the manual prints them, e.g. "<UNIT> - REMOVED AND REPLACED IAW <R/I task as printed>. OPS CHECK IAW <test task as printed> GOOD."'}},required:['part_name','category']}};
+{const _bt=buildTools;buildTools=function(){const T=_bt();if(!T.some(t=>t.name===LE_TOOL.name))T.push(LE_TOOL);return T}}
+TOOL_LABEL.record_component_change=i=>`Component change: ${i.part_name||''}`;
+{const _rt=runTool;runTool=async function(name,input){
+  if(name==='record_component_change'){
+    if(!CASE)return {summary:'no case',error:true,data:{error:'No open case.'}};
+    const p=leUpsert(input||{});
+    const miss=[!p.off.pn&&'P/N off',!p.off.sn&&'S/N off',!p.on.pn&&'P/N on',!p.on.sn&&'S/N on',!p.reason&&'reason removed'].filter(Boolean);
+    return {summary:`${(p.name||'component').slice(0,40)} logged`,data:{recorded:true,part_id:p.id,
+      paperwork:`Component Log Entry${leTag()?' and '+leTagTitle():''} are ready under this message and in Export Case. The technician photographs the replacement part's release certificate (8130-3 / Form One) so its times and certificate data fill in, checks every field, picks the return to service statement and signs.`,
+      missing:miss.length?miss:undefined,reminder:miss.length?'Ask the technician for the missing '+miss.join(', ')+'.':undefined}};
+  }
+  const r=await _rt(name,input);
+  if(name==='record_corrective_action'&&r&&r.data&&r.data.recorded&&input&&(input.pn_off||input.pn_on||input.sn_off||input.sn_on)){
+    const p=leUpsert({pn_off:input.pn_off,sn_off:input.sn_off,pn_on:input.pn_on,sn_on:input.sn_on,description:input.corrective_action});r.data.part_id=p.id}
+  return r}}
+// chat card under the tool line
+function partCard(id){
+  const p=lePart(id);if(!p)return null;const el=document.createElement('div');el.className='card melcard partcard';el.dataset.part=id;
+  const L=[p.off.pn&&`OFF ${p.off.pn}${p.off.sn?' S/N '+p.off.sn:''}`,p.on.pn&&`ON ${p.on.pn}${p.on.sn?' S/N '+p.on.sn:''}`].filter(Boolean);
+  el.innerHTML=`<div class="melopt"><span class="melcat catD">R&amp;R</span><span class="melnum">Component Transaction · ${esc(LE_CAT[p.cat]||'')}</span></div>
+    <div class="meltitle" style="font-size:15px;font-weight:800;margin-top:6px">${esc(p.name||'Component')}</div>
+    ${L.length?`<div class="hint">${esc(L.join(' · '))}</div>`:''}<div class="hint">${p.cert&&p.cert.trk?esc(`${p.cert.form||'Release'} ${p.cert.trk} read`):'Photograph the 8130-3 / Form One to fill the installed part times.'}</div>
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn small pcLog">Log Entry</button>${leTag()?`<button class="btn2 small pcTag">${esc(leTagTitle())}</button>`:''}</div>`;
+  el.querySelector('.pcLog').onclick=()=>openPart(id);const t=el.querySelector('.pcTag');if(t)t.onclick=()=>openPart(id,'tag');
+  return el;
+}
+function refreshPartCards(){$$('#chatLog .partcard').forEach(o=>{const n=partCard(o.dataset.part);if(n)o.replaceWith(n)})}
+function leOutHtml(box,blob,name){
+  const file=new File([blob],name,{type:'application/pdf'}),url=URL.createObjectURL(blob);const canShare=!!(navigator.canShare&&navigator.canShare({files:[file]}));
+  box.innerHTML=`<div class="kv" style="margin-bottom:8px">${esc(name)} · ${(blob.size/1024).toFixed(0)} KB</div>
+    <div class="grid2">${canShare?'<button class="btn" data-share>Share / Save</button>':''}<a class="btn2" href="${url}" download="${esc(name)}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;text-decoration:none;${canShare?'':'grid-column:1/-1'}">Open PDF</a></div>`;
+  const s=box.querySelector('[data-share]');if(s)s.onclick=async()=>{try{await navigator.share({files:[file],title:name})}catch(e){if(e.name!=='AbortError')box.insertAdjacentHTML('beforeend',`<div class="errbox" style="margin-top:8px">${esc(e.message)}</div>`)}};
+}
+// list of the case's transactions (Export Case → Component Log Entry)
+function openParts(){
+  if(!CASE){showModal('COMPONENT LOG ENTRY','<div class="kv">Open a case first.</div>');return}
+  const L=leParts();
+  showModal('COMPONENT LOG ENTRY',`<div class="kv">Remove-and-replace transactions in this case. Each one makes a log entry${leTag()?' and a '+esc(leTagTitle())+' for the removed part':''}, any time, even while the case is open.</div>
+    ${L.length?L.map(p=>`<div class="res lepick" data-id="${p.id}"><div class="h"><span class="mt">${esc(LE_CAT[p.cat]||'')}</span><span class="ttl">${esc(p.name||'Component')}</span></div>
+      <div class="lb">${esc([p.off.pn&&'Off '+p.off.pn+(p.off.sn?' S/N '+p.off.sn:''),p.on.pn&&'On '+p.on.pn+(p.on.sn?' S/N '+p.on.sn:'')].filter(Boolean).join(' · ')||'No part numbers yet')}</div>
+      <div class="sn">${esc(dmyStr(p.inst)||'')}${p.cert&&p.cert.trk?' · '+esc((p.cert.form||'')+' '+p.cert.trk):''}</div></div>`).join(''):'<div class="hint" style="margin:10px 0">No component changes recorded yet. Tell the assistant when you remove and replace a part, or add one here.</div>'}
+    <button class="btn" id="leAdd" style="width:100%;margin-top:10px">Add Component Change</button>`);
+  $$('#modalBody .lepick').forEach(el=>el.onclick=()=>openPart(el.dataset.id));
+  $('#leAdd').onclick=()=>{const p=leNewPart({});leParts().push(p);saveCase();openPart(p.id)};
+}
+async function lePhotoView(id){const u=await phData(id);showModal('PHOTO',u?`<img src="${u}" alt="Release certificate" style="width:100%;height:auto;border-radius:12px;display:block">`:'<div class="kv">This photo is not on this device.</div>')}
+// the editor: component, certificate photo, installed part times, log entry header and sign-off, repair tag
+function openPart(id,focus){
+  const p=lePart(id);if(!p)return;const f=CASE.form=CASE.form||{};const me=Object.assign({},store.get(AMDL_PERSON_KEY,{})||{},store.get(LE_PERSON_KEY,{})||{});
+  if(!me.name&&typeof syCfg==='function')me.name=syCfg().tech||'';
+  const RT=leTag();const cu=store.get(LE_TAG_KEY,{})||{};const T=p.tag=p.tag||{};const ol=p.offLife=p.offLife||{};
+  if(!p.wo)p.wo=`${f.sn||''}_${dmy(parseDay(p.inst)||new Date())}`.replace(/^_/,'');
+  const fld=(id,label,val,ph='',extra='')=>`<div class="field"><label>${label}</label><input id="${id}" value="${esc(val||'')}" placeholder="${esc(ph)}" autocomplete="off" ${extra}></div>`;
+  const sel=(id,label,opts,v)=>`<div class="field"><label>${label}</label><select id="${id}">${opts.map(([k,t])=>`<option value="${esc(k)}" ${k===v?'selected':''}>${esc(t)}</option>`).join('')}</select></div>`;
+  const chk=(id,label,on)=>`<label class="lechk"><input type="checkbox" id="${id}" ${on?'checked':''}> ${esc(label)}</label>`;
+  const codes=(f.cmc||[]).filter(x=>x.kind==='code'&&x.code).map(x=>x.code);
+  const ph=String(f.phase||'');const inAir=/takeoff|climb|cruise|descent|approach|landing/i.test(ph);
+  const condAuto={ground:!!ph&&!inAir,flight:inAir,climb:/takeoff|climb/i.test(ph),descent:/descent|approach/i.test(ph),landing:/landing/i.test(ph),firstPower:/power up/i.test(ph)};
+  const fim=[...new Set((CASE.msgs||[]).filter(m=>m.role==='assistant').flatMap(m=>m.content.filter(b=>b.type==='text').flatMap(b=>(b.text.match(/FIM\s+(?:TASK\s+)?(\d{2}-\d{2}-\d{2}(?:-\d{3}-\d{3})?)/gi)||[]).map(s=>s.replace(/^FIM\s+(TASK\s+)?/i,'')))))].slice(0,2).join(', ');
+  // repair tag defaults for this transaction
+  const tagDef={qty:'1',company:cu.company||leCfg().customer||'',contact:cu.contact||me.name,phone:cu.phone||me.phone,email:cu.email,engModel:p.cat==='engine'?PROFILE.engineModel||'':p.cat==='apu'?PROFILE.apuModel||'':'',
+    code1:codes[0]||'',code2:codes[1]||'',alt:/cruise/i.test(ph)?f.alt||'':'',fim,pocPhone:me.phone||'',...Object.fromEntries(LE_TAG_REMEMBER.filter(k=>cu[k]).map(k=>[k,cu[k]]))};
+  const tagVal=k=>['mfgDate','tsn','csn','ysn','tso','cso','yso','totalLife','installedLife'].includes(k)?ol[k]:(T[k]!=null?T[k]:tagDef[k]);
+  const has=k=>RT&&RT.fields&&RT.fields[k];
+  const tagHtml=!RT?'':`<details class="more" id="leTagBox" ${focus==='tag'?'open':''} style="margin-top:14px"><summary>▸ ${esc(RT.title||'Repair Tag')} (Removed Part)</summary>
+      ${(RT.returnTypes||[]).length?`<div class="field"><label>Check all that apply</label><div class="lechks">${RT.returnTypes.map(r=>chk('leR_'+r.id,r.label||r.id,T.ret&&T.ret[r.id])).join('')}</div></div>`:''}
+      ${RT.checks&&(RT.checks.aog||RT.checks.urgent||RT.checks.routine)?`<div class="grid2">${sel('lePri','Priority',[['','—'],['aog','AOG'],['urgent','Urgent'],['routine','Routine']],T.pri||'')}</div>`:''}
+      <div class="grid2">${LE_TAG_TEXT.filter(([k])=>has(k)).map(([k,l])=>fld('leT_'+k,l,tagVal(k))).join('')}</div>
+      ${RT.radios&&RT.radios.codes?`<div class="grid2">${sel('leCodesYN','Fault codes available',[['','—'],['yes','Yes'],['no','No']],T.codesYN!=null?T.codesYN:(codes.length?'yes':''))}</div>`:''}
+      ${(RT.conditions||[]).length?`<div class="field"><label>Condition at time of failure</label><div class="lechks">${RT.conditions.map(c=>chk('leC_'+c.id,c.label||c.id,T.cond?T.cond[c.id]:!!condAuto[c.auto])).join('')}</div></div>`:''}
+      ${RT.radios&&RT.radios.solved?`<div class="grid2">${sel('leSolved','Replacement part solved the problem',[['','—'],['yes','Yes'],['no','No']],T.solved!=null?T.solved:(CASE.clearing?'yes':''))}</div>`:''}
+      ${RT.checks&&(RT.checks.cert8130||RT.checks.certEasa)?`<div class="field"><label>Certification requirements</label><div class="lechks">${RT.checks.cert8130?chk('leC8130','FAA 8130-3',T.c8130!=null?T.c8130:true):''}${RT.checks.certEasa?chk('leCEasa','EASA Form 1',T.cEasa):''}</div></div>`:''}
+      ${RT.checks&&(RT.checks.ratingAP||RT.checks.ratingCRS||RT.checks.ratingMil||RT.checks.ratingFNAA)?`<div class="field"><label>Customer certificate</label><div class="lechks">${[['ratingAP','FAA Rating Airframe/Powerplant'],['ratingCRS','Certified Repair Station'],['ratingMil','Military'],['ratingFNAA','FNAA']].filter(([k])=>RT.checks[k]).map(([k,l])=>chk('leRt_'+k,l,cu[k]!=null?cu[k]:k==='ratingAP')).join('')}</div></div>`:''}
+      <button class="btn" id="leTagGo" style="width:100%">Create ${esc(RT.title||'Repair Tag')}</button><div id="leTagOut" style="margin-top:10px"></div>
+    </details>`;
+  const stl=leStatements();
+  showModal('COMPONENT LOG ENTRY',`<div id="leWrap">
+    <h3 class="amh">Component</h3>
+    <div class="grid2">${sel('leCat','Category',Object.entries(LE_CAT),p.cat)}${sel('lePos','Engine position',[['','—'],['1','Engine 1 (Left)'],['2','Engine 2 (Right)']],p.pos)}</div>
+    <div class="grid2">${fld('leName','Part name',p.name,'Component name')}${fld('leTask','Task No. / Position',p.task,'As printed in the manual, or LH / RH')}</div>
+    <div class="field"><label>Work performed</label><textarea id="leDesc" rows="3" placeholder="<UNIT> - REMOVED AND REPLACED IAW … OPS CHECK GOOD.">${esc(p.desc||'')}</textarea></div>
+    <div class="field"><label>Reason removed</label><input id="leReason" value="${esc(p.reason||'')}" placeholder="INOPERATIVE / TIME CHANGE" autocomplete="off"></div>
+    <h3 class="amh">Removed</h3>
+    <div class="grid2">${fld('leOffPn','P/N off',p.off.pn)}${fld('leOffSn','S/N off',p.off.sn)}</div>
+    <h3 class="amh">Installed</h3>
+    <div class="grid2">${fld('leOnPn','P/N on',p.on.pn)}${fld('leOnSn','S/N on',p.on.sn)}</div>
+    <div class="field"><label>Release certificate (8130-3 / Form One / EASA Form 1)</label>
+      <div class="phbtns" style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn2 small" id="leCam" type="button"><span class="ms">photo_camera</span>Take Photo</button><button class="btn2 small" id="leLib" type="button"><span class="ms">photo_library</span>Photo Library</button>${p.photo?'<button class="btn2 small" id="leView" type="button"><span class="ms">image</span>View</button>':''}</div>
+      <div id="leScan" class="hint" style="margin-top:6px">${p.cert&&p.cert.readAt?`Read ${esc(dmyt(p.cert.readAt))}. Check every field against the certificate.`:'The AI reads the certificate and fills the fields below. Check every one.'}</div></div>
+    <div class="grid2">${sel('leForm','Form',[['','—'],...LE_FORMS.map(x=>[x,x])],p.cert.form)}${fld('leTrk','Form tracking no.',p.cert.trk)}</div>
+    <div class="grid2"><div class="field"><label>Status / work (block 11)</label><input id="leStatus" list="leStatusL" value="${esc(p.cert.status||'')}" autocomplete="off"><datalist id="leStatusL">${LE_STATUS.map(s=>`<option value="${s}">`).join('')}</datalist></div>${fld('leCertDate','Certificate date',p.cert.date,'DD MMM YYYY')}</div>
+    <div class="grid2">${fld('leOrg','Approved organization',p.cert.org)}${fld('leRemarks','Remarks (block 12)',p.cert.remarks)}</div>
+    <h3 class="amh">Installed Part Times</h3>
+    <div class="grid2">${sel('leTdes','Designation',[['','—'],...Object.entries(LE_TDES)],p.tdes)}${fld('leInst','Install date',p.inst,'','type="date"')}</div>
+    <div class="grid3">${fld('lePMos','Months',p.mos,'0','inputmode="numeric"')}${fld('lePHrs','Hours',p.hrs,'0','inputmode="decimal"')}${fld('lePCyc','<span id="leCycL">Cycles</span>',p.cyc,'0','inputmode="numeric"')}</div>
+    <div id="leTcBox" class="${p.tdes==='TC'?'':'hidden'}">${fld('leTcDate','Times continued as of',p.tcDate,'DD MMM YYYY')}</div>
+    <div class="hint" id="leTimesHint" style="margin:-4px 0 10px"></div>
+    <h3 class="amh">Log Entry</h3>
+    <div class="grid2">${fld('leWo','Work order #',p.wo)}${fld('leDesig','Aircraft',leDesig())}</div>
+    <div class="grid2">${fld('leReg','Registration',f.reg,'N1KE','autocapitalize="characters"')}${fld('leSn','Serial number',f.sn,typeof SN_HINT!=='undefined'?SN_HINT:'')}</div>
+    <details class="more" id="leTimesBox" ${TIMES_KEYS.some(k=>f[k])?'':'open'}><summary>▸ Aircraft, Engine &amp; APU Times</summary>${timesHtml('le',f)}${fld('leApuSt','APU starts',f.apuSt,'','inputmode="numeric"')}</details>
+    <div class="field"><label>Log entry description</label><textarea id="leLog" rows="7">${esc(p.logEdited&&p.logText?p.logText:leItemLines(p).join('\n'))}</textarea>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><button type="button" class="btn2 small" id="leRebuild"><span class="ms">refresh</span>Rebuild From Fields</button><span class="hint" id="leLogHint" style="margin:0">${p.logEdited?'Edited by hand. Field changes no longer update it.':'Follows the fields above until you edit it.'}</span></div></div>
+    <div class="grid2">${sel('leRtsCat','Return to service statement',Object.entries(LE_CAT),p.rts.cat||p.cat)}${sel('leRtsOp','Operation',stl.map(s=>[s.id,s.label||s.id]),stl.some(s=>s.id===p.rts.op)?p.rts.op:leRtsDefault())}</div>
+    <div class="kv" id="leRtsText" style="margin:-2px 0 12px;font-size:12.5px"></div>
+    <div class="grid2">${fld('leTech','Work performed by',me.name)}${fld('leCert','Certificate #',me.cert)}</div>
+    <button class="btn" id="leGo" style="width:100%">Create Log Entry PDF</button><div id="leOut" style="margin-top:10px"></div>
+    ${tagHtml}
+    <button class="btn2" id="leDel" style="width:100%;margin-top:16px">Remove This Transaction</button></div>`);
+  const ET=wireTimes('le',f,()=>{Object.assign(f,ET.read());saveCase()});
+  const g=id=>{const e=$('#'+id);return e?e.value.trim():''};const c=id=>{const e=$('#'+id);return !!(e&&e.checked)};
+  const rtsText=()=>{const s=leStatement(g('leRtsOp'));$('#leRtsText').textContent=s[g('leRtsCat')]||s.airframe||''};
+  const timesHint=()=>{const d=g('leTdes'),u=leUnit(g('leCat'));$('#leCycL').textContent=u==='AFL'?'Cycles (AFL)':u==='ENC'?'Cycles (ENC)':'APU starts';
+    $('#leTcBox').classList.toggle('hidden',d!=='TC');$('#lePos').closest('.field').style.opacity=g('leCat')==='engine'?1:.45;
+    $('#leTimesHint').textContent=d==='TC'?'Time continued: enter the times the part carries and the date they are counted to.':d?`${d} times are counted from the install date (${dmyStr(g('leInst'))||'—'}).`:'Pick the designation from the release certificate (status / block 11).'};
+  const read=()=>{
+    p.cat=g('leCat');p.pos=g('lePos');p.name=g('leName');p.task=g('leTask');p.desc=$('#leDesc').value.trim();p.reason=g('leReason');
+    p.off={pn:g('leOffPn'),sn:g('leOffSn')};p.on={pn:g('leOnPn'),sn:g('leOnSn')};
+    Object.assign(p.cert,{form:g('leForm'),trk:g('leTrk'),status:g('leStatus'),date:g('leCertDate'),org:g('leOrg'),remarks:g('leRemarks')});
+    p.tdes=g('leTdes');p.inst=g('leInst');p.mos=g('lePMos');p.hrs=g('lePHrs');p.cyc=g('lePCyc');p.tcDate=g('leTcDate');p.wo=g('leWo');
+    p.rts={cat:g('leRtsCat'),op:g('leRtsOp')};
+    f.reg=g('leReg').toUpperCase();f.sn=g('leSn');f.apuSt=g('leApuSt');Object.assign(f,ET.read());
+    if(RT){
+      if((RT.returnTypes||[]).length)T.ret=Object.fromEntries(RT.returnTypes.map(r=>[r.id,c('leR_'+r.id)]));
+      if((RT.conditions||[]).length)T.cond=Object.fromEntries(RT.conditions.map(x=>[x.id,c('leC_'+x.id)]));
+      for(const [k] of LE_TAG_TEXT)if($('#leT_'+k)){if(['mfgDate','tsn','csn','ysn','tso','cso','yso','totalLife','installedLife'].includes(k))ol[k]=g('leT_'+k);else T[k]=g('leT_'+k)}
+      if($('#lePri'))T.pri=g('lePri');if($('#leCodesYN'))T.codesYN=g('leCodesYN');if($('#leSolved'))T.solved=g('leSolved');
+      if($('#leC8130'))T.c8130=c('leC8130');if($('#leCEasa'))T.cEasa=c('leCEasa');
+    }
+    p.upd=Date.now();
+  };
+  const remember=()=>{
+    store.set(LE_PERSON_KEY,{name:g('leTech'),cert:g('leCert'),phone:(RT&&g('leT_pocPhone'))||me.phone||''});
+    if(RT){const o={...cu};for(const k of LE_TAG_REMEMBER)if($('#leT_'+k))o[k]=g('leT_'+k);for(const k of ['ratingAP','ratingCRS','ratingMil','ratingFNAA'])if($('#leRt_'+k))o[k]=c('leRt_'+k);store.set(LE_TAG_KEY,o)}
+    store.set(LE_RTS_KEY,g('leRtsOp'));const d=g('leDesig');store.set(LE_DESIG_KEY,d&&d!==(PROFILE.designation||PROFILE.aircraft||APPNAME)?d:'');
+    if(f.reg||f.sn)store.set(LAST_AC_KEY,{reg:f.reg,sn:f.sn});
+  };
+  // the log entry description follows the fields until the technician edits it; Rebuild From Fields starts it over
+  const logSync=force=>{if(p.logEdited)return;const t=leItemLines(p).join('\n');const e=$('#leLog');if(e&&(force||document.activeElement!==e)&&e.value!==t){e.value=t;p.logText=t}};
+  $('#leLog').addEventListener('focus',()=>{if(!p.logEdited){read();logSync(true)}});
+  $('#leLog').addEventListener('input',()=>{p.logEdited=true;$('#leLogHint').textContent='Edited by hand. Field changes no longer update it.'});
+  $('#leRebuild').onclick=()=>{p.logEdited=false;$('#leLog').value=leItemLines(p).join('\n');$('#leLogHint').textContent='Follows the fields above until you edit it.';draft()};
+  let tmr=null;const draft=()=>{clearTimeout(tmr);tmr=setTimeout(()=>{if(!lePart(id)||!$('#leWrap'))return;read();logSync();p.logText=$('#leLog').value.replace(/\s+$/,'');saveCase();refreshPartCards()},400)};
+  $('#leWrap').addEventListener('input',draft);$('#leWrap').addEventListener('change',draft);
+  $('#leCat').addEventListener('change',()=>{p.catSet=true;$('#leRtsCat').value=g('leCat');const em=$('#leT_engModel');if(em&&!em.value)em.value=g('leCat')==='engine'?PROFILE.engineModel||'':g('leCat')==='apu'?PROFILE.apuModel||'':'';rtsText();timesHint()});
+  ['leRtsCat','leRtsOp'].forEach(i=>$('#'+i).addEventListener('change',rtsText));
+  ['leTdes','leInst'].forEach(i=>$('#'+i).addEventListener('change',timesHint));
+  rtsText();timesHint();
+  // release certificate photo → the AI reads it → fields filled for the technician to check
+  const pick=cam=>{const i=document.createElement('input');i.type='file';i.accept='image/*';if(cam)i.setAttribute('capture','environment');i.onchange=()=>{if(i.files&&i.files[0])leScanCert(p,i.files[0])};i.click()};
+  $('#leCam').onclick=()=>pick(true);$('#leLib').onclick=()=>pick(false);if($('#leView'))$('#leView').onclick=()=>lePhotoView(p.photo);
+  $('#leDel').onclick=()=>{const b=$('#leDel');if(!b.dataset.armed){b.dataset.armed='1';b.textContent='Tap Again to Remove';setTimeout(()=>{if(b.isConnected){delete b.dataset.armed;b.textContent='Remove This Transaction'}},4000);return}
+    CASE.parts=leParts().filter(x=>x.id!==id);saveCase();$$('#chatLog .partcard').forEach(x=>{if(x.dataset.part===id)x.remove()});openParts()};
+  const outBtn=async(btnId,outId,label,fn)=>{read();logSync();p.logText=$('#leLog').value.replace(/\s+$/,'');remember();saveCase();refreshPartCards();const b=$('#'+btnId);b.disabled=true;b.textContent='Creating PDF…';$('#'+outId).innerHTML='';
+    try{const {blob,name,notes}=await fn();b.disabled=false;b.textContent=label;leOutHtml($('#'+outId),blob,name);if(notes&&notes.length)$('#'+outId).insertAdjacentHTML('afterbegin',`<div class="melrow melwarn" style="margin-bottom:8px">${notes.map(esc).join('<br>')}</div>`)}
+    catch(e){b.disabled=false;b.textContent=label;$('#'+outId).innerHTML=`<div class="errbox">${esc(e.message||String(e))}</div>`}};
+  $('#leGo').onclick=()=>outBtn('leGo','leOut','Create Log Entry PDF',()=>buildLogEntry(p,{desig:g('leDesig'),tech:g('leTech'),cert:g('leCert')}));
+  if(RT)$('#leTagGo').onclick=()=>outBtn('leTagGo','leTagOut','Create '+(RT.title||'Repair Tag'),()=>buildRepairTag(p,{tech:g('leTech'),cert:g('leCert'),
+    ratings:Object.fromEntries(['ratingAP','ratingCRS','ratingMil','ratingFNAA'].map(k=>[k,c('leRt_'+k)]))}));
+  if(focus==='tag')setTimeout(()=>{const d=$('#leTagBox');if(d)d.scrollIntoView({block:'start'})},60);
+}
+const LE_SCAN_SYS=`You read aviation airworthiness release certificates from a photo: FAA Form 8130-3, Transport Canada Form One (24-0078), EASA Form 1, or a similar authorized release certificate. Return ONLY a JSON object, no prose, with these string keys:
+form ("FAA 8130-3", "TCCA Form One", "EASA Form 1", or "Other: <name>"), tracking_no (block 3 form tracking number), organization (block 4, name and city only), work_order (block 5), description (block 7), part_number (block 8), quantity (block 9), serial_number (block 10), status (block 11 exactly as printed, e.g. NEW, OVERHAULED, REPAIRED, INSPECTED/TESTED, MODIFIED), remarks (block 12, verbatim but at most 300 characters), date (block 14e or the release date, as "D MMM YYYY" with the month in capitals, e.g. "21 OCT 2026"), tsn_hours, tsn_cycles, tso_hours, tso_cycles (only if printed in the remarks), legible ("yes", or a list of the blocks you could not read).
+Copy characters exactly. If a value is missing or not legible use "". Never guess a part number, serial number, date or time.`;
+async function leAsk(model,image){
+  const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':cfg.anthropicKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model,max_tokens:1500,system:LE_SCAN_SYS,messages:[{role:'user',content:[image,{type:'text',text:'Read this release certificate.'}]}]})});
+  if(!res.ok){let m=await res.text();try{m=JSON.parse(m).error.message}catch(e){}const err=new Error(`Anthropic API ${res.status}: ${m}`);err.status=res.status;throw err}
+  const j=await res.json();if(CASE&&CASE.usage&&j.usage){CASE.usage.in=(CASE.usage.in||0)+(j.usage.input_tokens||0);CASE.usage.out=(CASE.usage.out||0)+(j.usage.output_tokens||0)}
+  return (j.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n');
+}
+async function leScanCert(p,file){
+  const box=$('#leScan');const say=(h,err)=>{if(box){box.innerHTML=h;box.classList.toggle('errbox',!!err)}};
+  try{
+    say('Reading the photo…');
+    const pid=await phFromFile(file);p.photo=pid;saveCase();
+    if(!cfg.anthropicKey){say('Photo saved with the transaction. Add your Anthropic API key in Settings so the AI can read it.',true);return}
+    const u=await phData(pid);const image={type:'image',source:{type:'base64',media_type:'image/jpeg',data:u.split(',')[1]}};say('The AI is reading the certificate…');
+    let txt='',last=null;for(const m of [...new Set([briefModel(),cfg.model])]){try{txt=await leAsk(m,image);break}catch(e){last=e;if(e.status===401||e.status===429)break}}
+    if(!txt)throw last||new Error('no reply');
+    const j=JSON.parse((txt.match(/\{[\s\S]*\}/)||['{}'])[0]);
+    const put=(id,val)=>{const e=$('#'+id);if(e&&val!=null&&String(val).trim()!==''){e.value=String(val).trim();e.classList.add('lefilled')}};
+    const notes=[];const nk=s=>String(s||'').replace(/\s/g,'').toUpperCase();
+    const onPn=$('#leOnPn').value.trim(),onSn=$('#leOnSn').value.trim();
+    if(j.part_number&&onPn&&nk(onPn)!==nk(j.part_number))notes.push(`P/N on was ${onPn}; the certificate shows ${j.part_number}.`);
+    if(j.serial_number&&onSn&&nk(onSn)!==nk(j.serial_number))notes.push(`S/N on was ${onSn}; the certificate shows ${j.serial_number}.`);
+    put('leOnPn',j.part_number);put('leOnSn',j.serial_number);
+    const form=String(j.form||'');put('leForm',LE_FORMS.find(x=>form.toUpperCase().startsWith(x.toUpperCase()))||(form?'Other':''));
+    put('leTrk',j.tracking_no);put('leStatus',String(j.status||'').toUpperCase());put('leCertDate',j.date?dmyStr(j.date).toUpperCase():'');put('leOrg',j.organization);put('leRemarks',j.remarks);
+    if(!$('#leName').value.trim()&&j.description)put('leName',String(j.description).replace(/\b\w+/g,w=>w.charAt(0)+w.slice(1).toLowerCase()));
+    const des=leTdesFromStatus(j.status);if(des&&!$('#leTdes').value){$('#leTdes').value=des;$('#leTdes').dispatchEvent(new Event('change'))}
+    if(j.tsn_hours||j.tso_hours)notes.push(`Remarks list times (${[j.tsn_hours&&'TSN '+j.tsn_hours+' hrs',j.tsn_cycles&&j.tsn_cycles+' cyc',j.tso_hours&&'TSO '+j.tso_hours+' hrs',j.tso_cycles&&j.tso_cycles+' cyc'].filter(Boolean).join(', ')}). If the part comes with time continued, set the designation to TC and enter them.`);
+    if(j.legible&&j.legible!=='yes')notes.push('Could not read: '+(Array.isArray(j.legible)?j.legible.join(', '):j.legible)+'.');
+    p.cert.readAt=Date.now();const w=$('#leWrap');if(w)w.dispatchEvent(new Event('change'));
+    say(`<b>Filled from the certificate (highlighted).</b> Check every field against the form.${notes.length?'<br>'+notes.map(esc).join('<br>'):''}`);
+  }catch(e){say(esc('Could not read the certificate: '+(e.message||e)+'. Enter the fields by hand.'),true)}
+}
+// ── the log entry PDF (Lato) ──
+async function leFonts(doc){
+  const {StandardFonts}=window.PDFLib;let reg=null,bold=null;
+  if(window.fontkit){doc.registerFontkit(window.fontkit);
+    try{const [a,b]=await Promise.all([ttfB64(LATO.normal),ttfB64(LATO.bold)]);const u=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));reg=await doc.embedFont(u(a),{subset:true});bold=await doc.embedFont(u(b),{subset:true})}catch(e){reg=bold=null}}
+  if(!reg){reg=await doc.embedFont(StandardFonts.Helvetica);bold=await doc.embedFont(StandardFonts.HelveticaBold)}
+  return {reg,bold};
+}
+function leItemLines(p){
+  const u=leUnit(p.cat),L=[];
+  L.push(p.desc||`${(p.name||'COMPONENT').toUpperCase()} - REMOVED AND REPLACED${p.task&&/\d/.test(p.task)?' IAW '+p.task:''}.`);
+  if(p.off.pn||p.off.sn)L.push(`Removed ${p.off.pn||''}  S/N# ${p.off.sn||''}${p.reason?'  Reason Removed '+p.reason.toUpperCase():''}`);
+  if(p.on.pn||p.on.sn){const t=[p.mos!==''&&p.mos!=null?p.mos+' MOS':'',p.hrs!==''&&p.hrs!=null?p.hrs+' HRS':'',p.cyc!==''&&p.cyc!=null?p.cyc+' '+u:''].filter(Boolean).join(' ');
+    L.push(`Installed ${p.on.pn||''} S/N# ${p.on.sn||''}${p.tdes?` Installed Part Times ${p.tdes}: ${t}${p.tdes==='TC'&&p.tcDate?' AS OF '+dmyStr(p.tcDate).toUpperCase():''}`:''}`)}
+  if(p.cert&&(p.cert.form||p.cert.trk))L.push(`${p.cert.form||'Release Certificate'}${p.cert.trk?' Form Tracking No. '+p.cert.trk:''}${p.cert.status?' · '+p.cert.status.toUpperCase():''}${p.cert.date?' · '+p.cert.date.toUpperCase():''}`);
+  return L;
+}
+async function buildLogEntry(p,o){
+  await amdlLib();const {PDFDocument,rgb}=window.PDFLib;
+  const doc=await PDFDocument.create();const {reg,bold}=await leFonts(doc);
+  const f=CASE.form||{};const W=612,H=792,R=595,k=rgb(0,0,0),gr=rgb(.78,.78,.78);
+  let page=doc.addPage([W,H]);const notes=[];
+  const T=(t,x,y,sz=8,fnt=reg)=>{t=String(t??'');if(t)page.drawText(t,{x,y:H-y,size:sz,font:fnt,color:k})};
+  const TR=(t,x,y,sz,fnt)=>T(t,x-fnt.widthOfTextAtSize(String(t),sz),y,sz,fnt);
+  const line=(x1,y1,x2,y2,w=.5,c=k)=>page.drawLine({start:{x:x1,y:H-y1},end:{x:x2,y:H-y2},thickness:w,color:c});
+  const wrap=(t,w,sz=8,fnt=reg)=>{const out=[];for(const para of String(t||'').split(/\n/)){let cur='';for(const word of para.split(/\s+/).filter(Boolean)){const nx=cur?cur+' '+word:word;if(fnt.widthOfTextAtSize(nx,sz)<=w)cur=nx;else{if(cur)out.push(cur);cur=word}}out.push(cur)}return out};
+  const desig=o.desig||leDesig(),regn=(f.reg||'').toUpperCase(),sn=f.sn||'';
+  const inst=parseDay(p.inst)||new Date();
+  const header=()=>{
+    TR(`${desig} ${regn} S/N: ${sn}`.replace(/\s+/g,' ').trim(),R-5,25,10,bold);
+    T('Work Order #:',353,64,8,bold);T(p.wo||'',413,60,8);line(410,63,482,63,.5);
+    const cols=[[17,'Date',dmy(inst)],[85,'A/C HRS',f.tt],[137,'A/C AFL',f.cyc],[187,'ENG 1 HRS',f.e1Hrs],[239,'ENG 1 ENC',f.e1Cyc],[288,'ENG 2 HRS',f.e2Hrs],[337,'ENG 2 ENC',f.e2Cyc],[383,'APU HRS',f.apuHrs],[437,'APU Starts',f.apuSt],[491,'',''],[541,'',''],[593,'','']];
+    page.drawRectangle({x:17,y:H-102,width:576,height:35,borderColor:k,borderWidth:.6});
+    line(17,85,593,85,.5);
+    for(let i=0;i<cols.length-1;i++){const [x,h,v]=cols[i],x2=cols[i+1][0];if(i)line(x,67,x,102,.5);
+      if(h)T(h,x+(x2-x-bold.widthOfTextAtSize(h,7))/2,79,7,bold);if(v)T(String(v),x+5,96,7.2)}
+    T('No.',22,110,8,bold);T('Task No./Position',48,110,8,bold);T('Description',198,110,8,bold);line(17,115,593,115,1);
+  };
+  header();
+  let y=128;
+  const items=[{task:[p.task,p.cat==='engine'&&p.pos?'ENG '+p.pos:''].filter(Boolean).join(' / '),lines:p.logEdited&&p.logText?p.logText.split('\n'):leItemLines(p)}];
+  items.forEach((it,n)=>{
+    const rows=it.lines.flatMap(t=>wrap(t,390,7.6));const tk=wrap(it.task,145,7.6);
+    const need=Math.max(rows.length,tk.length)*12.2+4;if(y+need>H-150){page=doc.addPage([W,H]);header();y=128}
+    T(String(n+1),22,y,7.6);tk.forEach((t,i)=>T(t,48,y+i*12.2,7.6));rows.forEach((t,i)=>T(t,198,y+i*12.2,7.6));
+    y+=need;line(17,y-7,593,y-7,.4,gr);y+=6;
+  });
+  y-=6;line(17,y-5,593,y-5,1);
+  const s=leStatement(p.rts&&p.rts.op),st=s[(p.rts&&p.rts.cat)||p.cat]||s.airframe||'';
+  const sl=wrap(st,460,7.6);sl.forEach((t,i)=>T(t,17,y+7+i*12,7.6));y+=7+sl.length*12;
+  const sy=y+64;
+  T('Work Performed By:',60,sy,8,bold);line(162,sy+2,325,sy+2,.6);T((o.tech||'').toUpperCase(),164,sy+11,7.6);
+  T('Certificate #:',336,sy,8,bold);T(o.cert||'',408,sy-4,7.6);line(405,sy+2,534,sy+2,.6);
+  if(!p.on.pn||!p.on.sn)notes.push('P/N or S/N on is blank.');if(!p.tdes)notes.push('Installed part time designation (TSO / TSN / TSR / TC) is not set.');if(!o.tech)notes.push('Work Performed By is blank.');
+  if(!(leCfg().statements||[]).length)notes.push('No return to service statements are set up in this data set (operator.json → logEntry.statements); a generic statement was used.');
+  doc.setTitle(`Log Entry ${regn} ${p.name||''}`.trim());doc.setAuthor(o.tech||'');doc.setSubject(`${LE_CAT[p.cat]} component log entry`);
+  const bytes=await doc.save();
+  const tag=s=>String(s||'').replace(/[^A-Za-z0-9-]/g,'');
+  const name=`${[tag(regn)||tag(APPNAME),'LOG',tag(p.on.pn||p.off.pn)||'COMPONENT',dateCode(inst)].filter(Boolean).join('_')}.pdf`;
+  return {blob:new Blob([bytes],{type:'application/pdf'}),name,notes};
+}
+// ── repair tag: the operator's fillable form (operator.json forms.<id>), filled field by field and left fillable ──
+// fields: {key: PDF field name} for the keys in LE_TAG_TEXT plus date, partName, partNumber, serialNumber, acModel, acSn, acReg, acHrs, acCyc,
+//   engTime, engCyc, reason, work, pocName, printName, certNo, dateSigned; checks: {engine, apu, aog, urgent, routine, cert8130, certEasa,
+//   ratingAP, ratingCRS, ratingMil, ratingFNAA: field}; radios: {codes|solved: {field, yes, no}}; returnTypes / conditions: [{id, label, field, auto}]
+async function buildRepairTag(p,o){
+  const RT=leTag();if(!RT)throw new Error('No repair tag form is set up in this data set (operator.json → logEntry.repairTag).');
+  await amdlLib();const {PDFDocument}=window.PDFLib;let tpl;
+  try{tpl=await rawFetch(RT.pdf,{root:true})}catch(e){throw new Error(e.status===404?`The blank form (${RT.pdf}) is not in the data set.`:e.message)}
+  const doc=await PDFDocument.load(tpl);const form=doc.getForm();const f=CASE.form||{};const T=p.tag||{},ol=p.offLife||{};const F=RT.fields||{},CK=RT.checks||{},RD=RT.radios||{};const notes=[];
+  const touched=[];const set=(k,v)=>{const n=F[k];v=String(v??'').trim();if(!n||!v)return;try{const tf=form.getTextField(n);tf.setText(v);touched.push(tf)}catch(e){}};
+  const tickF=(n,on)=>{if(!n||!on)return;try{form.getCheckBox(n).check()}catch(e){try{const g=form.getRadioGroup(n);g.select(g.getOptions()[0])}catch(e2){}}};
+  const radio=(r,v)=>{if(!r||!v)return;const want=v==='yes'?r.yes:r.no;try{const g=form.getRadioGroup(r.field);const m=g.getOptions().find(x=>x===want)||g.getOptions().find(x=>x.toLowerCase().startsWith(v));if(m)g.select(m)}catch(e){try{form.getCheckBox(want||r.field).check()}catch(e2){}}};
+  const today=dmy(new Date());
+  for(const [k] of LE_TAG_TEXT)set(k,['mfgDate','tsn','csn','ysn','tso','cso','yso','totalLife','installedLife'].includes(k)?ol[k]:T[k]);
+  if(!T.contact)set('contact',o.tech);
+  set('date',today);set('acModel',APPNAME);set('acSn',f.sn);set('acReg',(f.reg||'').toUpperCase());set('acHrs',f.tt);set('acCyc',f.cyc);
+  if(p.cat==='engine'){tickF(CK.engine,true);set('engTime',p.pos==='2'?f.e2Hrs:p.pos==='1'?f.e1Hrs:'');set('engCyc',p.pos==='2'?f.e2Cyc:p.pos==='1'?f.e1Cyc:'');if(!p.pos)notes.push('Engine position not set: engine time and cycles left blank.')}
+  if(p.cat==='apu'){tickF(CK.apu,true);set('engTime',f.apuHrs);set('engCyc',f.apuSt)}
+  set('partName',p.name);set('partNumber',p.off.pn);set('serialNumber',p.off.sn);
+  const disc=typeof caseDiscrepancy==='function'?caseDiscrepancy():'';
+  set('reason',[p.reason&&p.reason.toUpperCase(),disc].filter(Boolean).join('\n'));
+  const cl=CASE.clearing&&CASE.clearing.corrective_action;
+  set('work',[p.desc,cl&&cl!==p.desc?cl:''].filter(Boolean).join('\n')||`${p.name||'Component'} removed and replaced.`);
+  radio(RD.codes,T.codesYN);radio(RD.solved,T.solved);
+  set('pocName',o.tech||T.contact);
+  for(const r of RT.returnTypes||[])tickF(r.field,T.ret&&T.ret[r.id]);
+  for(const c of RT.conditions||[])tickF(c.field,T.cond&&T.cond[c.id]);
+  tickF(CK.aog,T.pri==='aog');tickF(CK.urgent,T.pri==='urgent');tickF(CK.routine,T.pri==='routine');
+  tickF(CK.cert8130,T.c8130);tickF(CK.certEasa,T.cEasa);
+  for(const k of ['ratingAP','ratingCRS','ratingMil','ratingFNAA'])tickF(CK[k],o.ratings&&o.ratings[k]);
+  set('printName',(o.tech||'').toUpperCase());set('certNo',o.cert);set('dateSigned',today);
+  // Lato at a size that fits each box (single lines shrink to the box width; multi-line boxes use 9 pt)
+  try{const {reg}=await leFonts(doc);for(const tf of touched){const r=tf.acroField.getWidgets()[0].getRectangle();const v=tf.getText()||'';
+    let sz=tf.isMultiline()?9:Math.min(9,Math.max(5,r.height-5));if(!tf.isMultiline())while(sz>5&&reg.widthOfTextAtSize(v,sz)>r.width-4)sz-=.25;
+    try{if(!tf.acroField.getDefaultAppearance())tf.acroField.setDefaultAppearance('/Helv 0 Tf 0 g');tf.setFontSize(sz);tf.updateAppearances(reg)}catch(e){}}}catch(e){}
+  if(!p.off.pn||!p.off.sn)notes.push('Removed part P/N or S/N is blank.');
+  if((RT.returnTypes||[]).length&&!(T.ret&&Object.values(T.ret).some(Boolean)))notes.push('No return type is checked.');
+  doc.setTitle(`${RT.title||'Repair Tag'} ${p.off.pn||''} ${p.off.sn||''}`.trim());
+  const bytes=await doc.save({updateFieldAppearances:false}); /* keeps the form's own check box and radio drawings */
+  const tg=s=>String(s||'').replace(/[^A-Za-z0-9-]/g,'');
+  const name=`${[tg(f.reg)||tg(APPNAME),tg(RT.fileTag||'TAG'),tg(p.off.pn),tg(p.off.sn),dateCode(new Date())].filter(Boolean).join('_')}.pdf`;
+  return {blob:new Blob([bytes],{type:'application/pdf'}),name,notes};
+}
 
 $('#btnSettings').onclick=()=>openSettings();
 /* ═════════ Title Case for every field name, heading, button and menu (data and typed text untouched) ═════════ */
