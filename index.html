@@ -194,7 +194,7 @@ mark{background:var(--mark-bg);color:var(--amber-glow);border-radius:2px}
 @media(min-width:700px){.sheet{border-radius:12px}}
 .sheethd{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--border)}
 .sheethd .tt{flex:1;font-family:var(--mono);color:var(--amber);letter-spacing:1px;font-size:14px}
-.sheetbd{padding:16px;overflow-y:auto;padding-bottom:calc(16px + var(--safe-b))}
+.sheetbd{flex:1 1 auto;min-height:0;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:16px;overflow-y:auto;padding-bottom:calc(16px + var(--safe-b))}
 .pagetext{font-family:var(--mono);font-size:12.5px;line-height:1.5;white-space:pre-wrap;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;overflow-wrap:anywhere;color:var(--pagetext)}
 .kv{font-size:13px;color:var(--text-dim);line-height:1.6;margin-bottom:10px;word-break:break-word}
 .kv b{color:var(--text)}
@@ -541,6 +541,7 @@ body.melonly .tab[data-tab=describe],body.melonly .tab[data-tab=search],body.mel
 #composer.closedcase textarea,#composer.closedcase .camb{opacity:.45;pointer-events:none}
 .ptable .sub{font-size:11.5px;color:var(--text-dim);margin-top:2px}
 .ptable .sub .dlink{padding:1px 7px;font-size:11px;border-radius:6px;margin:2px 0 0;display:inline-block;line-height:1.5}
+#modal.kbup{bottom:auto;align-items:flex-end}#modal.kbup .sheet{max-height:100%;border-radius:20px 20px 0 0}#modal.kbup .sheet:before{display:none}
 </style>
 </head>
 <body>
@@ -3252,7 +3253,7 @@ function fitAppHeight(){
 
 // top bar and bottom bar never move: a drag that starts on them can't scroll or bounce the page
 ['header','.tabs'].forEach(sel=>{const el=document.querySelector(sel);if(el)el.addEventListener('touchmove',e=>{if(!e.target.closest('.aclist,select,input,textarea'))e.preventDefault()},{passive:false})});
-document.addEventListener('scroll',()=>{if(window.scrollY||window.scrollX)window.scrollTo(0,0)},{passive:true});
+document.addEventListener('scroll',()=>{const a=document.activeElement;if(a&&a.closest&&a.closest('#modal')&&a.matches('input,textarea,select'))return;if(window.scrollY||window.scrollX)window.scrollTo(0,0)},{passive:true});
   fitAppHeight();[50,300,800,1600].forEach(t=>setTimeout(fitAppHeight,t));
   if(window.visualViewport)visualViewport.addEventListener('resize',fitAppHeight);
   window.addEventListener('resize',fitAppHeight);window.addEventListener('orientationchange',()=>setTimeout(fitAppHeight,300));
@@ -3843,6 +3844,25 @@ $('#fleetPick').onclick=()=>{openFleet();refreshFleetInfo().catch(()=>{})};
   if(FC&&FC.mode==='mel'){const mi=$('#melInput');if(mi)mi.placeholder='Inoperative item or CAS message, e.g. Pack, Weather Radar, 21-1';const t=document.querySelector('.tab[data-tab=mel]');if(t)t.click();return}
   const cur=store.get(PFX+'_current',null);
   if(cur){const c=loadCases().find(x=>x.id===cur);if(c){CASE=c;showChat();renderCase()}}
+})();
+
+/* ═════════ Sheets and the on-screen keyboard ═════════
+   While the keyboard is up, the open sheet is sized to the visible screen above it (visualViewport), and the field being typed in
+   is scrolled into view inside the sheet, so it never ends up behind the keyboard. */
+(function sheetKbFit(){
+  const vv=window.visualViewport;if(!vv)return;
+  const modal=()=>document.getElementById('modal');
+  const typing=()=>{const a=document.activeElement;return !!(a&&a.closest&&a.closest('#modal')&&a.matches('input,textarea,select'))};
+  const fit=()=>{const m=modal();if(!m)return;const up=!m.classList.contains('hidden')&&typing()&&window.innerHeight-vv.height>80;
+    m.classList.toggle('kbup',up);
+    if(up){m.style.top=vv.offsetTop+'px';m.style.height=vv.height+'px'}else{m.style.top='';m.style.height=''}};
+  const reveal=el=>{const mb=document.getElementById('modalBody');if(!mb||!el.isConnected)return;fit();
+    const r=el.getBoundingClientRect(),b=mb.getBoundingClientRect();
+    if(r.top<b.top+8||r.bottom>b.bottom-8)mb.scrollTop+=r.top-b.top-Math.max(12,(b.height-r.height)/3)};
+  vv.addEventListener('resize',fit);vv.addEventListener('scroll',fit);
+  document.addEventListener('focusin',e=>{const el=e.target;if(!el.closest||!el.closest('#modalBody')||!el.matches('input,textarea,select'))return;
+    [60,300,600].forEach(t=>setTimeout(()=>reveal(el),t))});
+  document.addEventListener('focusout',()=>setTimeout(()=>{fit();if(!typing()&&(window.scrollY||window.scrollX))window.scrollTo(0,0)},150));
 })();
 </script>
 </body>
