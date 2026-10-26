@@ -542,6 +542,10 @@ body.melonly .tab[data-tab=describe],body.melonly .tab[data-tab=search],body.mel
 .ptable .sub{font-size:11.5px;color:var(--text-dim);margin-top:2px}
 .ptable .sub .dlink{padding:1px 7px;font-size:11px;border-radius:6px;margin:2px 0 0;display:inline-block;line-height:1.5}
 #modal.kbup{bottom:auto;align-items:flex-end}#modal.kbup .sheet{max-height:100%;border-radius:20px 20px 0 0}#modal.kbup .sheet:before{display:none}
+.dictrow{display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap}.dictrow .hint{margin:0}
+#dictBtn{display:inline-flex;align-items:center;justify-content:center;gap:6px;line-height:1}#dictBtn .ms{font-size:20px;margin:0}
+#dictBtn[aria-pressed=true]{background:var(--red,#d93025);color:#fff;border-color:transparent}#dictBtn[aria-pressed=true] .ms{animation:dictpulse 1.2s ease-in-out infinite}
+@keyframes dictpulse{0%,100%{opacity:1}50%{opacity:.35}}
 </style>
 </head>
 <body>
@@ -596,6 +600,7 @@ body.melonly .tab[data-tab=describe],body.melonly .tab[data-tab=search],body.mel
         <div class="card" id="describeCard">
           <h3>What's happening?</h3>
           <textarea id="descText" rows="5" placeholder="Describe the squawk in your own words: what the crew saw, when it happened, what it did, what changed. E.g. 'Cabin altitude crept up to 9,200 ft in cruise at FL410, a pressurization caution posted briefly then cleared. Outflow valve looked full closed on the synoptic.'"></textarea>
+          <div class="dictrow"><button type="button" class="btn2 small" id="dictBtn" aria-pressed="false"><span class="ms">mic</span><span class="dl">Dictate</span></button><span class="hint" id="dictHint"></span></div>
           <div class="phrow" id="descPhotos"></div>
           <label class="btn2 small phbtn"><span class="ms">add_a_photo</span>Add Photo<input type="file" id="descPhotoIn" accept="image/*" multiple style="display:none"></label>
         </div>
@@ -3863,6 +3868,30 @@ $('#fleetPick').onclick=()=>{openFleet();refreshFleetInfo().catch(()=>{})};
   document.addEventListener('focusin',e=>{const el=e.target;if(!el.closest||!el.closest('#modalBody')||!el.matches('input,textarea,select'))return;
     [60,300,600].forEach(t=>setTimeout(()=>reveal(el),t))});
   document.addEventListener('focusout',()=>setTimeout(()=>{fit();if(!typing()&&(window.scrollY||window.scrollX))window.scrollTo(0,0)},150));
+})();
+
+/* ═════════ Voice dictation for the Describe box (browser speech recognition; the text stays editable) ═════════ */
+(function(){
+  const btn=document.getElementById('dictBtn'),ta=document.getElementById('descText'),hint=document.getElementById('dictHint');if(!btn||!ta)return;
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  const say=t=>{hint.textContent=t||''};
+  if(!SR){btn.onclick=()=>say('Voice dictation is not available in this browser. Tap the microphone on the keyboard instead.');return}
+  let rec=null,on=false,base='',finalTxt='',interimTxt='',restarts=0;
+  const join=(a,b)=>!a?b:!b?a:(/\s$/.test(a)?a:a+' ')+b;
+  const tidy=t=>t.replace(/\s+/g,' ').replace(/(^|[.!?]\s+)([a-z])/g,(m,p,c)=>p+c.toUpperCase());
+  const show=interim=>{ta.value=join(base,tidy(join(finalTxt,interim)));ta.scrollTop=ta.scrollHeight;ta.dispatchEvent(new Event('input',{bubbles:true}))};
+  const set=v=>{on=v;btn.setAttribute('aria-pressed',v);btn.querySelector('.dl').textContent=v?'Stop':'Dictate'};
+  const start=()=>{
+    rec=new SR();rec.lang=navigator.language||'en-US';rec.continuous=true;rec.interimResults=true;
+    rec.onresult=e=>{let interim='';for(let i=e.resultIndex;i<e.results.length;i++){const r=e.results[i];if(r.isFinal)finalTxt=join(finalTxt,r[0].transcript.trim());else interim=join(interim,r[0].transcript.trim())}interimTxt=interim;show(interim);restarts=0};
+    rec.onerror=e=>{if(e.error==='not-allowed'||e.error==='service-not-allowed'){say('Microphone access is blocked. Allow it for this site in Settings, or use the keyboard microphone.');set(false)}
+      else if(e.error!=='no-speech'&&e.error!=='aborted')say('Dictation stopped: '+e.error)};
+    // phones end recognition after a pause; keep listening until Stop is tapped
+    rec.onend=()=>{show(interimTxt);interimTxt='';if(on&&restarts++<20){try{base=ta.value;finalTxt='';rec.start();return}catch(e){}}set(false);say('')}; // words still pending when it stops are kept
+    try{rec.start();say('Listening… tap Stop when you are done.')}catch(e){say('Could not start dictation: '+e.message);set(false)}
+  };
+  btn.onclick=()=>{if(on){set(false);try{rec&&rec.stop()}catch(e){}return}
+    base=ta.value;finalTxt='';interimTxt='';restarts=0;set(true);start()};
 })();
 </script>
 </body>
