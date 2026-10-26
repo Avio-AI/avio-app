@@ -716,7 +716,7 @@ body.melonly .tab[data-tab=describe],body.melonly .tab[data-tab=search],body.mel
         <div class="hint hidden" id="chatDictHint" style="margin:0 4px 6px"></div>
         <div class="crow">
           <label class="camb" title="Add a photo"><span class="ms">add_a_photo</span><input type="file" id="chatPhotoIn" accept="image/*" multiple style="display:none"></label>
-          <textarea id="chatInput" rows="1" placeholder="Report a result or ask a follow-up…"></textarea>
+          <textarea id="chatInput" rows="1" placeholder="Report or ask a follow-up"></textarea>
           <button class="iconbtn chatmic" id="chatMic" type="button" title="Dictate" aria-label="Dictate" aria-pressed="false"><span class="ms">mic</span></button>
           <button class="send" id="btnSend"><span class="ms">arrow_upward</span></button>
         </div>
@@ -1585,7 +1585,7 @@ async function ensureBrief(c){
 function renderBriefBar(busy){
   const el=$('#briefBar');if(!el)return;const c=CASE;
   const comp=$('#composer');if(comp)comp.classList.toggle('closedcase',!!(c&&c.status==='closed'));
-  const ci=$('#chatInput');if(ci)ci.placeholder=c&&c.status==='closed'?'Case closed — reopen it from the Case Brief to continue':'Report a result or ask a follow-up…';
+  const ci=$('#chatInput');if(ci)ci.placeholder=c&&c.status==='closed'?'Case closed — reopen it from the Case Brief to continue':'Report or ask a follow-up';
   if(!c||(!c.brief&&!busy&&!BRIEF_BUSY&&!(BRIEF_ERR&&replies(c)))){el.classList.add('hidden');return}
   el.classList.remove('hidden');el.classList.toggle('closed',c.status==='closed');
   const b=c.brief;const st=c.status==='closed'?'Closed':(b&&b.status)||'Troubleshooting';
