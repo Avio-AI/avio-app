@@ -546,6 +546,7 @@ body.melonly .tab[data-tab=describe],body.melonly .tab[data-tab=search],body.mel
 #dictBtn{display:inline-flex;align-items:center;justify-content:center;gap:6px;line-height:1}#dictBtn .ms{font-size:20px;margin:0}
 #dictBtn[aria-pressed=true]{background:var(--red,#d93025);color:#fff;border-color:transparent}#dictBtn[aria-pressed=true] .ms{animation:dictpulse 1.2s ease-in-out infinite}
 @keyframes dictpulse{0%,100%{opacity:1}50%{opacity:.35}}
+.crow .chatmic{flex-shrink:0;align-self:flex-end;margin-bottom:2px}.chatmic[aria-pressed=true]{background:var(--red,#d93025);color:#fff;border-radius:50%}.chatmic[aria-pressed=true] .ms{animation:dictpulse 1.2s ease-in-out infinite}
 </style>
 </head>
 <body>
@@ -712,9 +713,11 @@ body.melonly .tab[data-tab=describe],body.melonly .tab[data-tab=search],body.mel
       <div id="composer">
         <div class="qchips" id="followChips"></div>
         <div class="phrow" id="chatPhotos"></div>
+        <div class="hint hidden" id="chatDictHint" style="margin:0 4px 6px"></div>
         <div class="crow">
           <label class="camb" title="Add a photo"><span class="ms">add_a_photo</span><input type="file" id="chatPhotoIn" accept="image/*" multiple style="display:none"></label>
           <textarea id="chatInput" rows="1" placeholder="Report a result or ask a follow-up…"></textarea>
+          <button class="iconbtn chatmic" id="chatMic" type="button" title="Dictate" aria-label="Dictate" aria-pressed="false"><span class="ms">mic</span></button>
           <button class="send" id="btnSend"><span class="ms">arrow_upward</span></button>
         </div>
       </div>
@@ -3870,29 +3873,35 @@ $('#fleetPick').onclick=()=>{openFleet();refreshFleetInfo().catch(()=>{})};
   document.addEventListener('focusout',()=>setTimeout(()=>{fit();if(!typing()&&(window.scrollY||window.scrollX))window.scrollTo(0,0)},150));
 })();
 
-/* ═════════ Voice dictation for the Describe box (browser speech recognition; the text stays editable) ═════════ */
-(function(){
-  const btn=document.getElementById('dictBtn'),ta=document.getElementById('descText'),hint=document.getElementById('dictHint');if(!btn||!ta)return;
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  const say=t=>{hint.textContent=t||''};
+/* ═════════ Voice dictation (browser speech recognition): the Describe box and the case chat; the text stays editable ═════════ */
+function attachDictation(btn,ta,hint,o){
+  if(!btn||!ta)return;o=o||{};const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  const say=t=>{if(!hint)return;hint.textContent=t||'';if(o.hideEmpty)hint.classList.toggle('hidden',!t)};
   if(!SR){btn.onclick=()=>say('Voice dictation is not available in this browser. Tap the microphone on the keyboard instead.');return}
-  let rec=null,on=false,base='',finalTxt='',interimTxt='',restarts=0;
+  let rec=null,on=false,dead=false,base='',finalTxt='',interimTxt='',restarts=0;
   const join=(a,b)=>!a?b:!b?a:(/\s$/.test(a)?a:a+' ')+b;
   const tidy=t=>t.replace(/\s+/g,' ').replace(/(^|[.!?]\s+)([a-z])/g,(m,p,c)=>p+c.toUpperCase());
   const show=interim=>{ta.value=join(base,tidy(join(finalTxt,interim)));ta.scrollTop=ta.scrollHeight;ta.dispatchEvent(new Event('input',{bubbles:true}))};
-  const set=v=>{on=v;btn.setAttribute('aria-pressed',v);btn.querySelector('.dl').textContent=v?'Stop':'Dictate'};
+  const set=v=>{on=v;btn.setAttribute('aria-pressed',v);const l=btn.querySelector('.dl');if(l)l.textContent=v?'Stop':'Dictate';btn.title=v?'Stop dictation':'Dictate'};
   const start=()=>{
     rec=new SR();rec.lang=navigator.language||'en-US';rec.continuous=true;rec.interimResults=true;
-    rec.onresult=e=>{let interim='';for(let i=e.resultIndex;i<e.results.length;i++){const r=e.results[i];if(r.isFinal)finalTxt=join(finalTxt,r[0].transcript.trim());else interim=join(interim,r[0].transcript.trim())}interimTxt=interim;show(interim);restarts=0};
+    rec.onresult=e=>{if(dead)return;let interim='';for(let i=e.resultIndex;i<e.results.length;i++){const r=e.results[i];if(r.isFinal)finalTxt=join(finalTxt,r[0].transcript.trim());else interim=join(interim,r[0].transcript.trim())}interimTxt=interim;show(interim);restarts=0};
     rec.onerror=e=>{if(e.error==='not-allowed'||e.error==='service-not-allowed'){say('Microphone access is blocked. Allow it for this site in Settings, or use the keyboard microphone.');set(false)}
       else if(e.error!=='no-speech'&&e.error!=='aborted')say('Dictation stopped: '+e.error)};
-    // phones end recognition after a pause; keep listening until Stop is tapped
-    rec.onend=()=>{show(interimTxt);interimTxt='';if(on&&restarts++<20){try{base=ta.value;finalTxt='';rec.start();return}catch(e){}}set(false);say('')}; // words still pending when it stops are kept
-    try{rec.start();say('Listening… tap Stop when you are done.')}catch(e){say('Could not start dictation: '+e.message);set(false)}
+    // phones end recognition after a pause: keep listening until Stop; words still pending when it stops are kept
+    rec.onend=()=>{if(dead){set(false);say('');return}show(interimTxt);interimTxt='';if(on&&restarts++<20){try{base=ta.value;finalTxt='';rec.start();return}catch(e){}}set(false);say('')};
+    try{rec.start();say(o.listening||'Listening… tap Stop when you are done.')}catch(e){say('Could not start dictation: '+e.message);set(false)}
   };
-  btn.onclick=()=>{if(on){set(false);try{rec&&rec.stop()}catch(e){}return}
-    base=ta.value;finalTxt='';interimTxt='';restarts=0;set(true);start()};
-})();
+  const stop=()=>{if(!on)return;show(interimTxt);interimTxt='';dead=true;set(false);say('');try{rec&&rec.stop()}catch(e){}}; // what was heard so far is in the box now; late results are ignored
+  btn.onclick=()=>{if(on){stop();return}base=ta.value;finalTxt='';interimTxt='';restarts=0;dead=false;set(true);start()};
+  return {stop,active:()=>on};
+}
+{const dd=attachDictation(document.getElementById('dictBtn'),document.getElementById('descText'),document.getElementById('dictHint'));
+  const st=document.getElementById('btnStart');if(dd&&st)st.addEventListener('pointerdown',()=>{if(dd.active())dd.stop()},true);}
+{const cd=attachDictation(document.getElementById('chatMic'),document.getElementById('chatInput'),document.getElementById('chatDictHint'),{hideEmpty:true,listening:'Listening… tap the microphone again to stop, then Send.'});
+  // sending stops dictation first, so the message goes out complete and the box is not refilled afterwards
+  const sb=document.getElementById('btnSend');if(cd&&sb)sb.addEventListener('pointerdown',()=>{if(cd.active())cd.stop()},true);
+  const ci=document.getElementById('chatInput');if(cd&&ci)ci.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&cd.active())cd.stop()},true);}
 </script>
 </body>
 </html>
