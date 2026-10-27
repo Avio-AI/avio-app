@@ -547,6 +547,7 @@ body.melonly .tab[data-tab=describe],body.melonly .tab[data-tab=search],body.mel
 #dictBtn[aria-pressed=true]{background:var(--red,#d93025);color:#fff;border-color:transparent}#dictBtn[aria-pressed=true] .ms{animation:dictpulse 1.2s ease-in-out infinite}
 @keyframes dictpulse{0%,100%{opacity:1}50%{opacity:.35}}
 .crow .chatmic{flex-shrink:0;align-self:flex-end;margin-bottom:2px}.chatmic[aria-pressed=true]{background:var(--red,#d93025);color:#fff;border-radius:50%}.chatmic[aria-pressed=true] .ms{animation:dictpulse 1.2s ease-in-out infinite}
+.qchip.techops{display:inline-flex;align-items:center;gap:4px;border-style:solid;font-weight:600}.qchip.techops .ms{font-size:15px}
 </style>
 </head>
 <body>
@@ -3902,6 +3903,31 @@ function attachDictation(btn,ta,hint,o){
   // sending stops dictation first, so the message goes out complete and the box is not refilled afterwards
   const sb=document.getElementById('btnSend');if(cd&&sb)sb.addEventListener('pointerdown',()=>{if(cd.active())cd.stop()},true);
   const ci=document.getElementById('chatInput');if(cd&&ci)ci.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&cd.active())cd.stop()},true);}
+
+/* ═════════ TechOps: aircraft support phone numbers, one tap from the case chat ═════════ */
+const TECHOPS_BASE=()=>[...((PROFILE&&PROFILE.techOps)||[]),...((OPERATOR&&OPERATOR.techOps)||[])].filter(c=>c&&c.phone);
+const TECHOPS_KEY='mxm_techops'; // contacts added on this device (every aircraft)
+const telHref=p=>{let d=String(p||'').replace(/[^\d+]/g,'');if(/^\d{10}$/.test(d))d='+1'+d;else if(/^1\d{10}$/.test(d))d='+'+d;return 'tel:'+d};
+function openTechOps(){
+  const base=TECHOPS_BASE(),mine=store.get(TECHOPS_KEY,[])||[];const f=(CASE&&CASE.form)||{};
+  const ready=[f.reg&&'Reg '+f.reg,f.sn&&'S/N '+f.sn,typeof timesLine==='function'&&timesLine(f)].filter(Boolean).join(' · ');
+  const row=(c,i,own)=>`<div class="res" style="display:flex;align-items:center;gap:10px"><div style="flex:1;min-width:0"><div class="ttl" style="font-weight:700">${esc(c.name||'Support')}</div><div class="lb">${esc(c.phone)}${c.note?' · '+esc(c.note):''}</div></div>
+    <a class="btn small" href="${esc(telHref(c.phone))}" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px"><span class="ms">call</span>Call</a>${own?`<button class="iconbtn todel" data-i="${i}" title="Remove" aria-label="Remove">✕</button>`:''}</div>`;
+  showModal('TECHOPS',`${ready?`<div class="kv" style="margin-bottom:10px">Have ready: ${esc(ready)}</div>`:''}
+    ${base.map((c,i)=>row(c,i,false)).join('')}${mine.map((c,i)=>row(c,i,true)).join('')}
+    ${!base.length&&!mine.length?'<div class="hint" style="margin:6px 0 10px">No support numbers yet. Add your Tech Ops or the manufacturer\'s support line below.</div>':''}
+    <details class="more" style="margin-top:12px"><summary>▸ Add a Number</summary>
+      <div class="grid2"><div class="field"><label>Name</label><input id="toName" placeholder="Tech Ops / Maintenance Control" autocomplete="off"></div><div class="field"><label>Phone</label><input id="toPhone" inputmode="tel" placeholder="800.555.0100" autocomplete="off"></div></div>
+      <div class="field"><label>Note (optional)</label><input id="toNote" placeholder="24 hr AOG desk" autocomplete="off"></div>
+      <button class="btn2" id="toAdd" style="width:100%">Save Number</button></details>`);
+  $('#modalTitle').textContent='TechOps';
+  $$('#modalBody .todel').forEach(b=>b.onclick=()=>{const L=store.get(TECHOPS_KEY,[])||[];L.splice(+b.dataset.i,1);store.set(TECHOPS_KEY,L);openTechOps()});
+  $('#toAdd').onclick=()=>{const n=$('#toName').value.trim(),p=$('#toPhone').value.trim();if(!p){$('#toPhone').focus();return}
+    const L=store.get(TECHOPS_KEY,[])||[];L.push({name:n||'Support',phone:p,note:$('#toNote').value.trim()});store.set(TECHOPS_KEY,L);openTechOps()};
+}
+{const _rf=renderFollowChips;renderFollowChips=function(){_rf.apply(this,arguments);const box=document.getElementById('followChips');if(!box||box.querySelector('.techops'))return;
+  const b=document.createElement('button');b.className='qchip techops';b.type='button';b.innerHTML='<span class="ms">call</span>TechOps';b.onclick=e=>{e.stopPropagation();openTechOps()};box.appendChild(b)};
+ try{renderFollowChips()}catch(e){}}
 </script>
 </body>
 </html>
