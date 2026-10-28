@@ -1288,7 +1288,8 @@ async function runTool(name,input){
     if(name==='lookup_fault'||name==='lookup_cas'){
       const r=searchFaults(input.query||'',15);r.forEach(f=>{if(f.cite&&f.doc!=null)registerSource({cite:f.cite,doc_id:f.doc,pdf_page:f.page})});
       return {summary:`${r.length} match${r.length===1?'':'es'}`,data:{matches:r.map(f=>({message:f.msg,fault_code:f.code||undefined,kind:f.kind||undefined,color:f.color||undefined,trigger_logic:f.cause||undefined,ata_chapter:f.ata||undefined,table:f.table||undefined,
-        procedure_id:f.proc||undefined,procedure_page:f.proc?f.page:undefined,cite:f.cite||undefined,doc_id:f.doc!=null?f.doc:undefined,pdf_page:f.doc!=null?f.page:undefined})),
+        procedure_id:f.proc||undefined,procedure_page:f.proc?f.page:undefined,cite:f.cite||undefined,doc_id:f.doc!=null?f.doc:undefined,pdf_page:f.doc!=null?f.page:undefined,
+        named_in:(f.refs||[]).length?f.refs.map(x=>{registerSource({cite:x[2],doc_id:x[0],pdf_page:x[1]});return {cite:x[2],doc_id:x[0],pdf_page:x[1]}}):undefined})),
         note:r.length?undefined:'Not in the fault index. Search the manuals for the message words.'}};
     }
     if(name==='get_fim_procedure'){
