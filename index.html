@@ -554,6 +554,12 @@ body.melonly .tab[data-tab=describe],body.melonly .tab[data-tab=search],body.mel
 @keyframes dictpulse{0%,100%{opacity:1}50%{opacity:.35}}
 .crow .chatmic{flex-shrink:0;align-self:flex-end;margin-bottom:2px}.chatmic[aria-pressed=true]{background:var(--red,#d93025);color:#fff;border-radius:50%}.chatmic[aria-pressed=true] .ms{animation:dictpulse 1.2s ease-in-out infinite}
 .qchip.techops{display:inline-flex;align-items:center;gap:4px;border-style:solid;font-weight:600}.qchip.techops .ms{font-size:15px}
+.impcard{display:flex;gap:10px;align-items:center;background:var(--tonal);color:var(--on-tonal);border-radius:12px;padding:10px 12px;margin:0 0 10px;font-size:13.5px}
+.impcard button{margin-left:auto;flex-shrink:0}
+.implist .row{display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)}
+.implist .row:last-child{border-bottom:none}.implist .row .lab{flex:1;min-width:0}.implist .row .lab div:last-child{font-size:12.5px;color:var(--text-dim)}
+.implist input[type=checkbox]{width:22px;height:22px;flex:0 0 auto;margin:0}
+.implist select{flex:0 0 40%;width:40%;min-width:0}
 </style>
 </head>
 <body>
@@ -2645,8 +2651,9 @@ function syLabel(c){const closed=c.remote?c.m.st==='closed':c.status==='closed';
   if(!c.remote)return caseListLabel(c)+(closed?' · Closed':'')+(hl?' — '+hl:'');const m=c.m;return `${m.reg||'No Tail'} · ATA ${m.ata||'—'} · ${dmy(new Date(m.created||m.updated))}${closed?' · Closed':''}${hl?' — '+hl:''}`}
 function syRenderCases(){
   const cases=syAll();const reps=c=>c.remote?c.m.replies:(c.msgs||[]).filter(m=>m.role==='assistant').length;
-  showModal('RECENT CASES',`<div class="hint" id="syStat" style="margin:0 0 6px"></div>`+(cases.length?`<div class="caselist">${cases.map(c=>`<div class="ci"><div class="t" data-id="${c.id}"><div>${esc(syLabel(c))}</div><div>${c.named?esc(c.title)+' · ':''}Updated ${dmyt(c.updated)} · ${(n=>n+(n===1?' reply':' replies'))(reps(c))}${c.by?' · '+esc(c.by):''}${c.remote?' · <span class="ms" style="font-size:14px;vertical-align:-2px" title="Saved on another device">cloud</span>':''}</div></div><button class="btn2 small danger" data-del="${c.id}">Delete</button></div>`).join('')}</div>`:'<div class="kv">No saved cases yet.</div>'));
-  syStat();
+  const nImp=impWaiting();
+  showModal('RECENT CASES',(nImp?`<div class="impcard"><span class="ms">move_to_inbox</span><span>${nImp} case${nImp===1?'':'s'} from another app on this phone</span><button class="btn2 small" id="impOpen">Import</button></div>`:'')+`<div class="hint" id="syStat" style="margin:0 0 6px"></div>`+(cases.length?`<div class="caselist">${cases.map(c=>`<div class="ci"><div class="t" data-id="${c.id}"><div>${esc(syLabel(c))}</div><div>${c.named?esc(c.title)+' · ':''}Updated ${dmyt(c.updated)} · ${(n=>n+(n===1?' reply':' replies'))(reps(c))}${c.by?' · '+esc(c.by):''}${c.remote?' · <span class="ms" style="font-size:14px;vertical-align:-2px" title="Saved on another device">cloud</span>':''}</div></div><button class="btn2 small danger" data-del="${c.id}">Delete</button></div>`).join('')}</div>`:'<div class="kv">No saved cases yet.</div>'));
+  syStat();{const b=$('#impOpen');if(b)b.onclick=openImport}
   $$('.caselist .t').forEach(el=>el.onclick=async()=>{
     let c=loadCases().find(x=>x.id===el.dataset.id);
     if(!c){el.style.opacity=.5;try{c=await syFetch(el.dataset.id);syStoreLocal(c)}catch(e){SY.err=e.message;syStat();el.style.opacity=1;return}}
@@ -3876,6 +3883,47 @@ function openFleet(undo,showHid){
 }
 $('#fleetPick').onclick=()=>{openFleet();refreshFleetInfo().catch(()=>{})};
 
+
+/* ═════════ Import cases saved on this phone by another app at this web address ═════════
+   Another troubleshooting app served from the same site keeps its cases in this browser's storage under <prefix>_cases
+   (same case layout: id, form, msgs; photos labelled {type:'image', photo:id} and read through phIdOf). Each such store is
+   offered once per aircraft connection; imported case ids are remembered so nothing is imported twice. */
+const IMP_KEY='avio_imported';
+function impStores(){const out=[];
+  try{for(const k of Object.keys(localStorage)){const m=k.match(/^(.+)_cases$/);if(!m||/^avio_/.test(k))continue;
+    let L;try{L=JSON.parse(localStorage.getItem(k))}catch(e){continue}
+    if(!Array.isArray(L))continue;L=L.filter(c=>c&&typeof c==='object'&&c.id&&Array.isArray(c.msgs));if(!L.length)continue;
+    out.push({key:k,prefix:m[1],cases:L})}}catch(e){}
+  return out}
+function impTargetFor(st){const E=fleetEntries().filter(e=>!e.t.pending&&!e.t.gone);const pf=st.prefix.toLowerCase();
+  return E.find(e=>{const n=String(e.t.name||e.t.id||'').toLowerCase();return n&&pf.startsWith(n)})||null}
+function impPending(st,e){const done=new Set((store.get(IMP_KEY,{})[st.key])||[]);const have=new Set(e?store.get(pfxFor(e.src.id,e.t.id)+'_cases',[]).map(c=>c.id):[]);
+  return st.cases.filter(c=>!done.has(c.id)&&!have.has(c.id))}
+function impWaiting(){return impStores().reduce((n,st)=>n+impPending(st,impTargetFor(st)).length,0)}
+function impRun(st,e){
+  const P=pfxFor(e.src.id,e.t.id),todo=impPending(st,e);if(!todo.length)return 0;
+  const conv=c=>{const x=JSON.parse(JSON.stringify(c));if(x.closedAt&&x.status!=='closed')x.status='closed';x.importedFrom=st.prefix;return x};
+  let cs=store.get(P+'_cases',[]).concat(todo.map(conv));cs.sort((a,b)=>(b.updated||b.created||0)-(a.updated||a.created||0));cs=cs.slice(0,20);
+  for(;;){try{localStorage.setItem(P+'_cases',JSON.stringify(cs));break}catch(err){if(cs.length<=1)break;cs.pop()}}
+  const kept=new Set(cs.map(c=>c.id));
+  {const d=store.get(P+'_syncdirty',[]);for(const c of todo)if(kept.has(c.id)&&!d.includes(c.id))d.push(c.id);store.set(P+'_syncdirty',d)}
+  const imp=store.get(IMP_KEY,{});imp[st.key]=[...new Set([...(imp[st.key]||[]),...todo.map(c=>c.id)])];store.set(IMP_KEY,imp);
+  return todo.filter(c=>kept.has(c.id)).length}
+function openImport(){
+  const E=fleetEntries().filter(e=>!e.t.pending&&!e.t.gone);
+  const S=impStores().map(st=>({st,e:impTargetFor(st)})).filter(x=>impPending(x.st,x.e).length||!x.e);
+  if(!S.length){showModal('IMPORT CASES','<div class="kv">There are no cases from another app on this phone left to import.</div>');return}
+  const opt=(sel)=>`<option value="">Choose aircraft…</option>`+E.map((e,i)=>`<option value="${i}" ${sel&&sel.src.id===e.src.id&&sel.t.id===e.t.id?'selected':''}>${esc(e.t.name||e.t.id||srcLabel(e.src))}</option>`).join('');
+  showModal('IMPORT CASES',`<div class="kv">Cases saved on this phone by another app at this web address. Pick the aircraft each set belongs to and import. Photos come along, closed cases stay closed, and nothing is imported twice. This app keeps the 20 most recent cases per aircraft on the phone; with case sync on, the rest stay in your cases repo.</div>
+    <div class="implist">${S.map((x,j)=>{const n=impPending(x.st,x.e).length||x.st.cases.length;const f=x.st.cases.map(c=>c.updated||c.created||0);
+      return `<div class="row"><input type="checkbox" data-j="${j}" ${x.e?'checked':''}><div class="lab"><div>${n} case${n===1?'':'s'}</div><div>Saved as “${esc(x.st.prefix)}” · ${esc(dmy(Math.min(...f)))} – ${esc(dmy(Math.max(...f)))}</div></div><select data-j="${j}">${opt(x.e)}</select></div>`}).join('')}</div>
+    <button class="btn" id="impGo" style="margin-top:12px">Import</button><div id="impOut"></div>`);
+  $('#impGo').onclick=()=>{let total=0;const lines=[];
+    S.forEach((x,j)=>{const on=document.querySelector(`.implist input[data-j="${j}"]`).checked;const v=document.querySelector(`.implist select[data-j="${j}"]`).value;
+      if(!on||v==='')return;const e=E[+v];const n=impRun(x.st,e);total+=n;lines.push(`${n} → ${esc(e.t.name||e.t.id||srcLabel(e.src))}`)});
+    $('#impOut').innerHTML=`<div class="kv" style="margin-top:10px">${total?`Imported ${total} case${total===1?'':'s'}: ${lines.join(' · ')}. Open them from Recent Cases.`:'Nothing imported: tick a set and choose its aircraft.'}</div>`;
+    if(total){const c=loadCases();if(CASE)CASE=c.find(x=>x.id===CASE.id)||CASE;if(typeof syFlush==='function')syFlush().catch(()=>{})}};
+}
 /* ═════════════════ BOOT ═════════════════ */
 (async function boot(){
   renderFaultChips();renderFollowChips();
