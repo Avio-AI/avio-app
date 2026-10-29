@@ -564,6 +564,8 @@ body.melonly .tab[data-tab=describe],body.melonly .tab[data-tab=search],body.mel
 .setuplist .hd{display:flex;gap:10px;align-items:center}.setuplist .hd input[type=checkbox]{width:22px;height:22px;flex:0 0 auto;margin:0}
 .setuplist .hd .lab{flex:1;min-width:0}.setuplist .hd .lab div:last-child{font-size:12.5px;color:var(--text-dim);overflow-wrap:anywhere}
 .setuplist .tok{margin:8px 0 0 32px}.setuplist .msg.err{color:var(--red);font-size:12.5px;margin:6px 0 0 32px}.setuplist .msg.ok{color:var(--green);font-size:12.5px;margin:6px 0 0 32px}
+.fleetbar{display:flex;align-items:center;gap:10px;background:var(--tonal);color:var(--on-tonal);border-radius:12px;padding:8px 10px 8px 14px;margin:8px 0 0;font-size:13.5px}
+.fleetbar button{margin-left:auto;flex-shrink:0}
 </style>
 </head>
 <body>
@@ -2359,7 +2361,7 @@ function renderAiBadge(){const a=$('#aiBadge');if(!a)return;const ok=!!cfg.anthr
 function renderBadges(err){renderAiBadge();
   const b=$('#badges');b.dataset.err=err||'';
   if(err){b.innerHTML=`<span class="badge" style="color:var(--red);border-color:var(--err-border)">DATA OFFLINE</span><span class="badge">${esc(err.slice(0,80))}</span>`;return}
-  const rev=DATA.manifest.revisions||{};const short=v=>{const m=String(v).match(/\bRev\.?\s*([\w.]+)/i)||String(v).match(/^R(\d[\w.]*)/i);return m?'R'+m[1]:''};
+  const rev=DATA.manifest.revisions||{};const short=v=>{const m=String(v).match(/\bRev\.?\s*([\w.]+(?:[–-][\w.]+)?)/i)||String(v).match(/^R(\d[\w.]*)/i);return m?'R'+m[1]:''};
   b.innerHTML=`${cfg.dataMode==='demo'?'<span class="badge amber">DEMO · FICTIONAL DATA</span>':''}${DATA.catalog.length?`<span class="badge amber">${DATA.catalog.length.toLocaleString()} DOCS</span>`:''}${Object.keys(rev).slice(0,5).map(k=>`<span class="badge">${esc(k)}${short(rev[k])?' '+esc(short(rev[k])):''}</span>`).join('')}${DATA.faults.length?`<span class="badge">${DATA.faults.length.toLocaleString()} FAULT MSGS</span>`:''}${DATA.manifest.mel?'<span class="badge">MEL</span>':''}`;renderAiBadge();
 }
 
@@ -2606,10 +2608,20 @@ async function syPushBrief(c){
   const r=await syApi(path,{method:'PUT',body:JSON.stringify({message:`${syAC()} ${(c.form&&c.form.reg)||''} case brief rev ${c.brief.rev}${c.status==='closed'?' (closed)':''}`.replace(/\s+/g,' '),content:b64utf8(md),...(sha?{sha}:{})})});
   if(!r.ok)throw new Error(syErr(r));done[c.id]=stamp;store.set(key,done);
 }
+// photos go to cases/<TYPE>/photos/<id>.jpg once (the same place the companion app uses); other devices fetch them on view (phRepo)
+const SY_PHK=()=>SY_PFX+'_syncph';
+async function syPushPhotos(c){
+  const done=new Set(store.get(SY_PHK(),[]));
+  const ids=[...new Set([...(c.msgs||[]).flatMap(m=>m.role==='user'?photoIds(m):[]),...(c.parts||[]).map(p=>p.photo).filter(Boolean)])].filter(id=>!done.has(id));
+  for(const id of ids){let rec=null;try{rec=await phTx('readonly',st=>st.get(id))}catch(e){}if(!rec||!rec.blob)continue; // not taken on this device
+    const b64=await new Promise(ok=>{const fr=new FileReader();fr.onload=()=>{const u=String(fr.result);ok(u.slice(u.indexOf(',')+1))};fr.onerror=()=>ok(null);fr.readAsDataURL(rec.blob)});if(!b64)continue;
+    const r=await syApi(`cases/${syAC()}/photos/${id}.jpg`,{method:'PUT',body:JSON.stringify({message:`${syAC()} photo ${id}`,content:b64})});
+    if(r.ok||r.status===422){done.add(id);store.set(SY_PHK(),[...done])}else throw new Error(syErr(r))}
+}
 async function syFlush(){
   if(!syOn())return;if(SY.busy)return SY.busy;
   let done;SY.busy=new Promise(r=>done=r);syStat();
-  try{for(let pass=0;pass<3&&syDirty().length;pass++)for(const id of syDirty()){const c=loadCases().find(x=>x.id===id);if(c){await syPush(c);try{await syPushBrief(c)}catch(e){console.warn(e)}}else syMark(id,false)}SY.err=''}
+  try{for(let pass=0;pass<3&&syDirty().length;pass++)for(const id of syDirty()){const c=loadCases().find(x=>x.id===id);if(c){await syPushPhotos(c);await syPush(c);try{await syPushBrief(c)}catch(e){console.warn(e)}}else syMark(id,false)}SY.err=''}
   catch(e){SY.err=String(e.message||e)}finally{SY.busy=null;done();syStat()}
 }
 async function syPull(){
@@ -3988,6 +4000,20 @@ function openShareSetup(){const u=setupLinkFor();
     <div class="grid2"><button class="btn2" id="shCopy">Copy Link</button>${navigator.share?'<button class="btn2" id="shShare">Share…</button>':''}</div><div id="shOut" class="hint" style="margin-top:8px"></div>`);
   $('#shCopy').onclick=async()=>{try{await navigator.clipboard.writeText(u);$('#shOut').textContent='Copied.'}catch(e){$('#shLink').select();$('#shOut').textContent='Select the link above and copy it.'}};
   const sh=$('#shShare');if(sh)sh.onclick=()=>navigator.share({title:'Avio.AI setup',url:u}).catch(()=>{})}
+
+/* ═════════ Typing a tail already worked under another aircraft offers to switch to it ═════════ */
+(function tailSwitch(){
+  const reg=$('#fReg');if(!reg)return;let bar=null;
+  const isCur=e=>e.src.id===cfg.active&&((FC&&FC.id)||null)===e.t.id;
+  const tailsOf=e=>{const m=new Map();try{for(const c of JSON.parse(localStorage.getItem(pfxFor(e.src.id,e.t.id)+'_cases')||'[]'))if(c&&c.form&&c.form.reg){const r=String(c.form.reg).toUpperCase();if(!m.has(r))m.set(r,c.form.sn||'')}}catch(err){}return m};
+  reg.addEventListener('input',()=>{const v=reg.value.trim().toUpperCase();if(bar){bar.remove();bar=null}if(v.length<3)return;
+    if(tailsOf({src:{id:cfg.active},t:{id:(FC&&FC.id)||null}}).has(v))return; // already known on this aircraft
+    for(const e of fleetEntries()){if(isCur(e)||e.t.pending||e.t.gone)continue;const t=tailsOf(e);if(!t.has(v))continue;
+      const nm=e.t.name||e.t.id||'that aircraft';bar=document.createElement('div');bar.className='fleetbar';
+      bar.innerHTML=`<span class="ms">flight</span><span>${esc(v)} is a ${esc(nm)}.</span><button class="btn small" type="button">Switch to ${esc(nm)}</button>`;
+      bar.querySelector('button').onclick=()=>{try{cfg.active=e.src.id;applySource();saveCfg();localStorage.setItem('avio_ac',JSON.stringify({src:e.src.id,type:e.t.id}));localStorage.setItem(pfxFor(e.src.id,e.t.id)+'_pendingtail',JSON.stringify({reg:v,sn:t.get(v)||''}))}catch(err){}location.reload()};
+      (reg.closest('.card')||reg.parentElement).appendChild(bar);break}});
+})();
 /* ═════════════════ BOOT ═════════════════ */
 (async function boot(){
   renderFaultChips();renderFollowChips();
