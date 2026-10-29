@@ -579,6 +579,11 @@ html.sysbar{--safe-b:0px}
 .casetagrow .ctl{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.casetagrow code{font-size:13.5px;background:var(--hover);padding:3px 8px;border-radius:8px}
 .casetagrow .tkt{display:inline-flex;align-items:center;gap:4px;background:var(--tonal);color:var(--on-tonal);border-radius:8px;padding:2px 4px 2px 8px;font-size:13.5px}
 .casetagrow .tkt button{border:none;background:none;color:inherit;cursor:pointer;font-size:12px;padding:0 4px}
+.mwboxes{display:flex;flex-direction:column;gap:6px}.mwbox{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:12px;padding:8px 10px}
+.mwbox .ms{font-size:20px;color:var(--muted)}.mwbox .mwb{flex:1;min-width:0;display:flex;flex-direction:column}.mwbox code{font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mwbox .hint{margin:0;font-size:12.5px}.mwbox button{border:none;background:none;color:var(--muted);cursor:pointer;font-size:13px;padding:4px 6px;border-radius:8px;white-space:nowrap}.mwbox button.sure{color:var(--red);background:var(--hover)}
+.mwcode{border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin-top:8px;display:flex;flex-direction:column;gap:8px}
+.mwcode .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.mwcode .row code{font-size:20px;letter-spacing:2px;background:var(--hover);padding:4px 10px;border-radius:8px}
 .docrow{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.docchip{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--border2,var(--border));background:none;color:inherit;border-radius:10px;padding:4px 10px;font:inherit;font-size:13px;cursor:pointer}
 .docchip .ms{font-size:18px;color:var(--red)}
 </style>
@@ -4192,7 +4197,7 @@ function docChips(m){const D=(m.content||[]).filter(b=>b&&b.avio_doc);if(!D.leng
     box.querySelectorAll('[data-tk]').forEach(b=>b.onclick=()=>{c.tickets.splice(+b.dataset.tk,1);saveCase();if(typeof syMark==='function'){syMark(c.id,true);syFlush().catch(()=>{})}mwPushTickets();draw()})};
   draw();mb.insertBefore(box,mb.firstChild)}}
 
-// ───────── settings: mail watcher, Gmail, notifications
+// ───────── settings: mail watcher, mailboxes (Google, Microsoft), notifications
 async function mwEnablePush(){
   const ios=/iPhone|iPad|iPod/.test(navigator.userAgent),standalone=navigator.standalone||matchMedia('(display-mode: standalone)').matches;
   if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window))throw new Error(ios&&!standalone?'On iPhone, add Avio.AI to the Home Screen and open it from there, then turn on notifications.':'This browser cannot show notifications.');
@@ -4209,18 +4214,43 @@ function mailSettingsHtml(){const m=mwCfg();
   <div class="field"><label>Mail watcher address</label><input id="mwUrl" value="${esc(m.url)}" placeholder="https://avio-mail.your-account.workers.dev" autocapitalize="off" autocomplete="off"></div>
   <div class="field"><label>Mail watcher key</label><input id="mwKey" type="password" value="${esc(m.key)}" placeholder="The key set on the mail watcher" autocomplete="off"></div>
   <div class="field"><label>Watched senders (one per line: an address, or @domain for everyone there)</label><textarea id="mwSenders" rows="3" placeholder="techops@your-oem.com&#10;@your-company.com" autocapitalize="off"></textarea></div>
-  <div class="grid2"><button class="btn2 small" type="button" id="mwGmail">Connect Mailbox</button><button class="btn2 small" type="button" id="mwPush">Turn On Notifications</button></div>
-  <div class="grid2" style="margin-top:8px"><button class="btn2 small" type="button" id="mwCheck">Check Mail Now</button><button class="btn2 small" type="button" id="mwTest">Test Notification</button></div>
+  <div class="field"><label>Mailboxes</label><div class="mwboxes" id="mwBoxes"><div class="hint" style="margin:0">None connected yet.</div></div></div>
+  <div class="grid2"><button class="btn2 small" type="button" id="mwGmail">Add Google Mailbox</button><button class="btn2 small" type="button" id="mwMs">Add Microsoft Mailbox</button></div>
+  <div id="mwMsCode"></div>
+  <div class="grid2" style="margin-top:8px"><button class="btn2 small" type="button" id="mwPush">Turn On Notifications</button><button class="btn2 small" type="button" id="mwTest">Test Notification</button></div>
+  <button class="btn2 small" type="button" id="mwCheck" style="margin-top:8px;width:100%">Check Mail Now</button>
   <div class="hint" id="mwStat" style="margin-top:8px"></div>`}
 function mailSettingsBind(){
   const st=(t,err)=>{const e=$('#mwStat');if(e)e.innerHTML=err?`<span style="color:var(--red)">${esc(t)}</span>`:t};
   const save=()=>{const c={url:$('#mwUrl').value.trim(),key:$('#mwKey').value.trim()};store.set(MW_KEY,c)};
-  const status=async()=>{if(!mwOn()){st('Not set up.');return}
+  const drawBoxes=L=>{const el=$('#mwBoxes');if(!el)return;
+    if(!L.length){el.innerHTML='<div class="hint" style="margin:0">None connected yet.</div>';return}
+    el.innerHTML=L.map(b=>`<div class="mwbox"><span class="ms">${b.kind==='microsoft'?'forward_to_inbox':'mail'}</span><div class="mwb"><code>${esc(b.email||'(unknown)')}</code>
+      <span class="hint">${b.kind==='microsoft'?'Microsoft':'Google'} · ${b.last?'checked '+esc(dmyt(b.last*1000)):'not checked yet'}${b.error?` · <span style="color:var(--red)">${esc(b.error)}</span>`:''}</span></div>
+      <button type="button" data-rm="${esc(b.id)}" aria-label="Remove mailbox">✕</button></div>`).join('');
+    el.querySelectorAll('[data-rm]').forEach(x=>x.onclick=async()=>{if(!x.classList.contains('sure')){x.classList.add('sure');x.textContent='Remove';setTimeout(()=>{if(x.isConnected){x.classList.remove('sure');x.textContent='✕'}},4000);return}
+      x.disabled=true;try{await mwApi('/mailbox/remove',{id:x.dataset.rm});st('Mailbox removed.');status()}catch(e){st(e.message,true);x.disabled=false}})};
+  const status=async()=>{if(!mwOn()){st('Not set up.');drawBoxes([]);return}
     try{const s=await mwApi('/status');const ta=$('#mwSenders');if(ta&&document.activeElement!==ta)ta.value=(s.senders||[]).join('\n');
-      st(`Mailbox: <code>${esc(s.gmail||'not connected')}</code> · last checked ${s.last?esc(dmyt(s.last*1000)):'never'} · ${s.subs} phone${s.subs===1?'':'s'} notified · ${s.tickets} ticket${s.tickets===1?'':'s'} watched${s.lastError?` · <span style="color:var(--red)">${esc(s.lastError)}</span>`:''}${syOn()?'':' · <span style="color:var(--amber)">turn on case history sync</span>'}`)}catch(e){st(e.message,true)}};
+      const L=s.boxes||(s.gmail?[{id:'',kind:'google',email:s.gmail,last:s.last}]:[]);drawBoxes(L);
+      st(`${L.length} mailbox${L.length===1?'':'es'} · ${s.subs} phone${s.subs===1?'':'s'} notified · ${s.tickets} ticket${s.tickets===1?'':'s'} watched${s.lastError&&!s.boxes?` · <span style="color:var(--red)">${esc(s.lastError)}</span>`:''}${syOn()?'':' · <span style="color:var(--amber)">turn on case history sync</span>'}`)}catch(e){st(e.message,true)}};
   ['mwUrl','mwKey'].forEach(id=>$('#'+id).addEventListener('change',()=>{save();status()}));
   $('#mwSenders').addEventListener('change',async()=>{save();try{await mwApi('/config',{senders:$('#mwSenders').value.split(/[\n,;]+/).map(s=>s.trim()).filter(Boolean)});status()}catch(e){st(e.message,true)}});
-  $('#mwGmail').onclick=()=>{save();if(!mwOn()){st('Enter the mail watcher address and key first.',true);return}const c=mwCfg();window.open(c.url.replace(/\/+$/,'')+'/auth/start?k='+encodeURIComponent(c.key),'_blank');st('Finish the sign-in in the page that opened, then come back here.')};
+  $('#mwGmail').onclick=()=>{save();if(!mwOn()){st('Enter the mail watcher address and key first.',true);return}const c=mwCfg();window.open(c.url.replace(/\/+$/,'')+'/auth/start?k='+encodeURIComponent(c.key),'_blank');st('Finish the sign-in in the page that opened, then come back here.');
+    const back=()=>{if(document.visibilityState==='visible'){document.removeEventListener('visibilitychange',back);setTimeout(status,800)}};document.addEventListener('visibilitychange',back)};
+  $('#mwMs').onclick=async()=>{save();if(!mwOn()){st('Enter the mail watcher address and key first.',true);return}const b=$('#mwMs'),box=$('#mwMsCode');b.disabled=true;
+    try{const r=await mwApi('/auth/ms/start',{});
+      box.innerHTML=`<div class="mwcode"><div class="hint" style="margin:0">Open <code>${esc(r.url.replace(/^https?:\/\//,''))}</code>, enter this code, and sign in with the Microsoft mailbox. Allow read access to mail.</div>
+        <div class="row"><code>${esc(r.code)}</code><button class="btn2 small" type="button" id="mwMsCopy">Copy</button><button class="btn small" type="button" id="mwMsOpen">Open Sign-In</button></div>
+        <div class="hint" style="margin:0" id="mwMsSt">Waiting for the sign-in…</div></div>`;
+      const ms=(t,err)=>{const e=$('#mwMsSt');if(e)e.innerHTML=err?`<span style="color:var(--red)">${esc(t)}</span>`:esc(t)};
+      $('#mwMsCopy').onclick=async()=>{try{await navigator.clipboard.writeText(r.code);$('#mwMsCopy').textContent='✔ Copied'}catch(e){}};
+      $('#mwMsOpen').onclick=async()=>{try{await navigator.clipboard.writeText(r.code)}catch(e){}window.open(r.url,'_blank')};
+      const until=Date.now()+r.expires*1000,iv=Math.max(5,r.interval||5)*1000;
+      const tick=async()=>{if(!box.isConnected||!box.querySelector('#mwMsSt'))return;if(Date.now()>until){ms('The code expired. Tap Add Microsoft Mailbox again.',true);return}
+        try{const c=await mwApi('/auth/ms/check',{});if(c.pending){setTimeout(tick,iv);return}
+          if(c.error){ms(c.error,true);return}box.innerHTML='';st(`✔ Mailbox connected: <code>${esc(c.email||'')}</code>`);status()}catch(e){ms(e.message,true)}};
+      setTimeout(tick,iv)}catch(e){st(e.message,true)}finally{b.disabled=false}};
   $('#mwPush').onclick=async()=>{save();const b=$('#mwPush');b.disabled=true;try{await mwEnablePush();st('✔ Notifications are on for this phone.');status()}catch(e){st(e.message,true)}finally{b.disabled=false}};
   $('#mwCheck').onclick=async()=>{save();const b=$('#mwCheck');b.disabled=true;b.textContent='Checking…';try{const r=await mwApi('/poll',{});await ibRefresh();st(r.ok?`Checked ${r.checked} new email${r.checked===1?'':'s'}; ${r.saved} saved for your cases.`:esc(r.reason||'Not checked'));if(ibPending().length)renderIbBar()}catch(e){st(e.message,true)}finally{b.disabled=false;b.textContent='Check Mail Now'}};
   $('#mwTest').onclick=async()=>{save();try{const r=await mwApi('/test',{});st(r.sent?'Test notification sent.':'No phone has notifications on yet: tap Turn On Notifications.')}catch(e){st(e.message,true)}};
