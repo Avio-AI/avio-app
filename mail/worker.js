@@ -19,6 +19,9 @@
 //          MS_TENANT                                (optional: the operator's tenant id; default "organizations")
 //          APP_ORIGIN (CORS origin of the app), VAPID_SUBJECT (mailto: address for push services)
 // Cron trigger: every 2 minutes.
+//
+// KV use stays inside the free plan (1,000 writes a day): progress is kept in one key, 'state', written when an email
+// is saved, when a mailbox error starts or clears, and otherwise at most every 10 minutes.
 
 const GMAIL = 'https://gmail.googleapis.com/gmail/v1/users/me';
 const GRAPH = 'https://graph.microsoft.com/v1.0/me';
@@ -79,14 +82,14 @@ export default {
       if (url.pathname === '/mailbox/remove' && req.method === 'POST') {
         const { id } = await req.json();
         await env.MAIL.put('boxes', JSON.stringify((await boxes(env)).filter(b => b.id !== id)));
-        for (const k of ['rt:', 'last:', 'err:']) await env.MAIL.delete(k + id);
+        await env.MAIL.delete('rt:' + id);
         return json({ ok: true });
       }
       if (url.pathname === '/status') {
-        const cfg = await getCfg(env), B = await boxes(env);
-        const list = await Promise.all(B.map(async b => ({ id: b.id, kind: b.kind, email: b.email, last: +(await env.MAIL.get('last:' + b.id) || 0), error: (await env.MAIL.get('err:' + b.id)) || '' })));
+        const cfg = await getCfg(env), B = await boxes(env), S = await getState(env, B);
+        const list = B.map(b => ({ id: b.id, kind: b.kind, email: b.email, last: S.last[b.id] || 0, error: S.err[b.id] || '' }));
         return json({ boxes: list, gmail: (list.find(b => b.kind === 'google') || {}).email || null, google: !!env.GOOGLE_CLIENT_ID, microsoft: !!env.MS_CLIENT_ID,
-          last: Math.max(0, ...list.map(b => b.last)), lastError: (await env.MAIL.get('err')) || '', vapid: (await vapidKeys(env)).pub, subs: (await getJ(env, 'subs', [])).length, senders: cfg.senders, tickets: cfg.tickets.length, repo: env.CASES_REPO });
+          last: Math.max(0, ...list.map(b => b.last)), lastError: Object.values(S.err).join(' · '), vapid: (await vapidKeys(env)).pub, subs: (await getJ(env, 'subs', [])).length, senders: cfg.senders, tickets: cfg.tickets.length, repo: env.CASES_REPO });
       }
       if (url.pathname === '/subscribe' && req.method === 'POST') {
         const { subscription } = await req.json();
@@ -113,7 +116,7 @@ export default {
       return json({ error: String(e && e.message || e) }, 500);
     }
   },
-  async scheduled(evt, env, ctx) { ctx.waitUntil(poll(env).catch(async e => env.MAIL.put('err', String(e.message || e)))); }
+  async scheduled(evt, env, ctx) { ctx.waitUntil(poll(env).catch(e => console.error(e))); }
 };
 
 // ───────── mailboxes: [{id, kind: 'google'|'microsoft', email}] in KV 'boxes'; per mailbox rt:<id>, last:<id>, err:<id>
@@ -132,8 +135,6 @@ async function addBox(env, kind, email, rt) {
   const id = await boxId(kind, email), B = (await boxes(env)).filter(b => b.id !== id);
   B.push({ id, kind, email, at: Date.now() });
   await env.MAIL.put('rt:' + id, rt);
-  if (!(await env.MAIL.get('last:' + id))) await env.MAIL.put('last:' + id, String(Math.floor(Date.now() / 1000) - 3600));   // start with the last hour
-  await env.MAIL.delete('err:' + id);
   await env.MAIL.put('boxes', JSON.stringify(B));
   return id;
 }
@@ -142,18 +143,29 @@ async function addBox(env, kind, email, rt) {
 export async function poll(env, deps = {}) {
   const f = deps.fetch || fetch;
   const B = await boxes(env); if (!B.length) return { ok: false, reason: 'No mailbox connected' };
-  const X = { env, f, cfg: await getCfg(env), seen: new Set(await getJ(env, 'seen', [])), threads: new Set(await getJ(env, 'threads', [])) };
+  const S = await getState(env, B), errBefore = JSON.stringify(S.err);
+  const X = { env, f, S, cfg: await getCfg(env), seen: new Set(S.seen), threads: new Set(S.threads) };
   let checked = 0, saved = 0; const errors = [];
   for (const b of B) {
     try {
       const r = b.kind === 'microsoft' ? await pollMs(X, b) : await pollGoogle(X, b);
-      checked += r.checked; saved += r.saved; await env.MAIL.delete('err:' + b.id);
-    } catch (e) { const m = String(e && e.message || e); errors.push(`${b.email}: ${m}`); await env.MAIL.put('err:' + b.id, m); }
+      checked += r.checked; saved += r.saved; delete S.err[b.id];
+    } catch (e) { const m = String(e && e.message || e).slice(0, 300); errors.push(`${b.email}: ${m}`); S.err[b.id] = m; }
   }
-  await env.MAIL.put('seen', JSON.stringify([...X.seen].slice(-3000)));
-  await env.MAIL.put('threads', JSON.stringify([...X.threads].slice(-800)));
-  if (errors.length) await env.MAIL.put('err', errors.join(' · ')); else await env.MAIL.delete('err');
+  for (const k of Object.keys(S.last)) if (!B.some(b => b.id === k)) { delete S.last[k]; delete S.err[k]; }
+  const now = Date.now();
+  if (saved || JSON.stringify(S.err) !== errBefore || now - (S.at || 0) >= 600000) {
+    S.seen = [...X.seen].slice(-3000); S.threads = [...X.threads].slice(-800); S.at = now;
+    await env.MAIL.put('state', JSON.stringify(S));
+  }
   return { ok: errors.length < B.length, checked, saved, errors };
+}
+// all polling progress in one KV key; a watcher from before moves its separate keys over once (reads only)
+async function getState(env, B) {
+  const S = await getJ(env, 'state', null); if (S) return { seen: [], threads: [], last: {}, err: {}, rtAt: {}, at: 0, ...S };
+  const out = { seen: await getJ(env, 'seen', []), threads: await getJ(env, 'threads', []), last: {}, err: {}, rtAt: {}, at: 0 };
+  for (const b of B || []) { const l = +(await env.MAIL.get('last:' + b.id) || 0); if (l) out.last[b.id] = l; }
+  return out;
 }
 function belongs(X, b, from, subject, thread) {
   const mine = from === String(b.email).toLowerCase();
@@ -173,7 +185,7 @@ async function pollGoogle(X, b) {
   const rt = await env.MAIL.get('rt:' + b.id); if (!rt) throw new Error('Sign in again');
   const tok = await googleToken(env, { refresh_token: rt, grant_type: 'refresh_token' }, f);
   const H = { Authorization: 'Bearer ' + tok.access_token };
-  const last = +(await env.MAIL.get('last:' + b.id) || 0) || Math.floor(Date.now() / 1000) - 3600;
+  const last = X.S.last[b.id] || Math.floor(Date.now() / 1000) - 3600;   // a new mailbox starts with the last hour
   const startedAt = Math.floor(Date.now() / 1000);
   const list = await (await f(`${GMAIL}/messages?maxResults=50&q=${encodeURIComponent(`after:${last - 300} -in:chats`)}`, { headers: H })).json();
   if (list.error) throw new Error('Gmail: ' + (list.error.message || list.error.status));
@@ -186,7 +198,7 @@ async function pollGoogle(X, b) {
     await filed(X, await captureGoogle(X, H, id, b));
     saved++;
   }
-  await env.MAIL.put('last:' + b.id, String(startedAt));
+  X.S.last[b.id] = startedAt;
   return { checked: ids.length, saved };
 }
 
@@ -218,26 +230,31 @@ async function captureGoogle(X, H, id, b) {
 }
 
 // ───────── Microsoft 365 / Outlook (Microsoft Graph)
-async function msToken(env, f, b) {
+async function msToken(env, f, b, S) {
   const rt = await env.MAIL.get('rt:' + b.id); if (!rt) throw new Error('Sign in again');
   const r = await f(msAuth(env) + '/token', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ client_id: env.MS_CLIENT_ID || '', grant_type: 'refresh_token', refresh_token: rt, scope: MS_SCOPE }) });
   const j = await r.json(); if (!r.ok) throw new Error('Microsoft sign-in: ' + String(j.error_description || j.error || r.status).split('\r')[0]);
-  if (j.refresh_token && j.refresh_token !== rt) await env.MAIL.put('rt:' + b.id, j.refresh_token);   // Microsoft hands out a new one each time
+  // Microsoft hands out a new refresh token each time; the old one stays valid, so keep the new one once a day
+  if (j.refresh_token && j.refresh_token !== rt && Date.now() - ((S && S.rtAt[b.id]) || 0) > 86400000) { await env.MAIL.put('rt:' + b.id, j.refresh_token); if (S) S.rtAt[b.id] = Date.now(); }
   return j.access_token;
 }
 async function pollMs(X, b) {
   const { env, f } = X;
-  const H = { Authorization: 'Bearer ' + await msToken(env, f, b) };
-  const last = +(await env.MAIL.get('last:' + b.id) || 0) || Math.floor(Date.now() / 1000) - 3600;
+  const H = { Authorization: 'Bearer ' + await msToken(env, f, b, X.S) };
+  const last = X.S.last[b.id] || Math.floor(Date.now() / 1000) - 3600;
   const startedAt = Math.floor(Date.now() / 1000);
   const since = new Date((last - 300) * 1000).toISOString().replace(/\.\d+Z$/, 'Z');
-  let next = `${GRAPH}/messages?$filter=${encodeURIComponent(`receivedDateTime ge ${since} and isDraft eq false`)}&$orderby=receivedDateTime%20asc&$top=50&$select=id,subject,from,conversationId,internetMessageId,receivedDateTime`;
-  let checked = 0, saved = 0;
-  for (let page = 0; next && page < 4; page++) {
+  let next = `${GRAPH}/messages?$filter=${encodeURIComponent(`receivedDateTime ge ${since} and isDraft eq false`)}&$orderby=receivedDateTime%20desc&$top=50&$select=id,subject,from,conversationId,internetMessageId,receivedDateTime`;
+  let checked = 0, saved = 0; const all = [];
+  for (let page = 0; next && page < 4; page++) {   // newest first, so a long gap never hides the latest mail
     const list = await (await f(next, { headers: H })).json();
     if (list.error) throw new Error('Outlook: ' + (list.error.message || list.error.code));
-    for (const m of list.value || []) {
+    all.push(...(list.value || []));
+    next = list['@odata.nextLink'] || '';
+  }
+  {
+    for (const m of all.reverse()) {
       const key = 'o' + (await sh(m.internetMessageId || m.id)).slice(0, 22);   // the Graph id changes when a message is moved; this does not
       if (X.seen.has(key)) continue;
       X.seen.add(key); checked++;
@@ -247,9 +264,8 @@ async function pollMs(X, b) {
       await filed(X, await captureMs(X, H, m, key, thread, b));
       saved++;
     }
-    next = list['@odata.nextLink'] || '';
   }
-  await env.MAIL.put('last:' + b.id, String(startedAt));
+  X.S.last[b.id] = startedAt;
   return { checked, saved };
 }
 async function captureMs(X, H, m, key, thread, b) {
