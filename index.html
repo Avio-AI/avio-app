@@ -640,7 +640,7 @@ html.sysbar{--safe-b:0px}
         <div class="card" id="describeCard">
           <h3>What's happening?</h3>
           <textarea id="descText" rows="5" placeholder="Describe the squawk in your own words: what the crew saw, when it happened, what it did, what changed. E.g. 'Cabin altitude crept up to 9,200 ft in cruise at FL410, a pressurization caution posted briefly then cleared. Outflow valve looked full closed on the synoptic.'"></textarea>
-          <div class="dictrow"><button type="button" class="btn2 small" id="dictBtn" aria-pressed="false"><span class="ms">mic</span><span class="dl">Dictate</span></button><span class="hint" id="dictHint"></span><label class="btn2 small phbtn"><span class="ms">add_a_photo</span>Add Photo<input type="file" id="descPhotoIn" accept="image/*" multiple style="display:none"></label></div>
+          <div class="dictrow"><button type="button" class="btn2 small" id="dictBtn" aria-pressed="false"><span class="ms">mic</span><span class="dl">PTT</span></button><span class="hint" id="dictHint"></span><label class="btn2 small phbtn"><span class="ms">add_a_photo</span>Add Photo<input type="file" id="descPhotoIn" accept="image/*" multiple style="display:none"></label></div>
           <div class="phrow" id="descPhotos"></div>
         </div>
 
@@ -4312,7 +4312,7 @@ function attachDictation(btn,ta,hint,o){
   const join=(a,b)=>!a?b:!b?a:(/\s$/.test(a)?a:a+' ')+b;
   const tidy=t=>t.replace(/\s+/g,' ').replace(/(^|[.!?]\s+)([a-z])/g,(m,p,c)=>p+c.toUpperCase());
   const show=interim=>{ta.value=join(base,tidy(join(finalTxt,interim)));ta.scrollTop=ta.scrollHeight;ta.dispatchEvent(new Event('input',{bubbles:true}))};
-  const set=v=>{on=v;btn.setAttribute('aria-pressed',v);const l=btn.querySelector('.dl');if(l)l.textContent=v?'Stop':'Dictate';btn.title=v?'Stop dictation':'Dictate'};
+  const set=v=>{on=v;btn.setAttribute('aria-pressed',v);const l=btn.querySelector('.dl');if(l)l.textContent=v?'Stop':'PTT';btn.title=v?'Stop dictation':'Dictate'};
   const start=()=>{
     rec=new SR();rec.lang=navigator.language||'en-US';rec.continuous=true;rec.interimResults=true;
     rec.onresult=e=>{if(dead)return;let interim='';for(let i=e.resultIndex;i<e.results.length;i++){const r=e.results[i];if(r.isFinal)finalTxt=join(finalTxt,r[0].transcript.trim());else interim=join(interim,r[0].transcript.trim())}interimTxt=interim;show(interim);restarts=0};
