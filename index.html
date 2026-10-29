@@ -1477,7 +1477,7 @@ const phDel=id=>phTx('readwrite',st=>st.delete(id)).catch(()=>{});
 async function phData(id){ // data URL, or null when the photo is not on this device
   if(PH_CACHE.has(id))return PH_CACHE.get(id);
   let rec=null;try{rec=await phTx('readonly',st=>st.get(id))}catch(e){}
-  if(!rec||!rec.blob)return null;
+  if(!rec||!rec.blob){const u=(await phCompanion(id).catch(()=>null))||(await phRepo(id));if(u)PH_CACHE.set(id,u);return u||null}
   const url=await new Promise(ok=>{const fr=new FileReader();fr.onload=()=>ok(fr.result);fr.readAsDataURL(rec.blob)});
   PH_CACHE.set(id,url);return url;
 }
@@ -1490,16 +1490,26 @@ async function phFromFile(file){
   const id='ph_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   await phPut({id,blob,w,h,t:Date.now()});return id;
 }
+// A case synced from the companion app on this site labels its photos {type:'image', photo:id} (store 'mxm_photos': id → {data, mt},
+// copies in the cases repo under cases/<TYPE>/photos/<id>.jpg). Both labels are read; a photo found nowhere becomes a note.
+const phIdOf=b=>(b&&(b.avio_photo||(b.type==='image'&&!b.source&&b.photo)))||null;
+function phCompanion(id){return new Promise(ok=>{let r;try{r=indexedDB.open('mxm_photos',1)}catch(e){return ok(null)}
+  r.onupgradeneeded=()=>r.result.createObjectStore('p'); // the companion app's own layout
+  r.onerror=()=>ok(null);r.onsuccess=()=>{const db=r.result;let g;try{g=db.transaction('p').objectStore('p').get(id)}catch(e){db.close();return ok(null)}
+    g.onerror=()=>{db.close();ok(null)};g.onsuccess=()=>{const v=g.result;db.close();ok(v&&v.data?`data:${v.mt||'image/jpeg'};base64,${v.data}`:null)}}})}
+async function phRepo(id){
+  try{if(typeof syOn!=='function'||!syOn())return null;const r=await syApi(`cases/${syAC()}/photos/${id}.jpg`,{raw:true});if(!r.ok)return null;
+    const blob=await r.blob();return await new Promise(ok=>{const fr=new FileReader();fr.onload=()=>ok(String(fr.result).replace(/^data:[^;,]*/,'data:image/jpeg'));fr.onerror=()=>ok(null);fr.readAsDataURL(blob)})}catch(e){return null}}
 async function expandPhotos(msgs){
   const out=[];
-  for(const m of msgs){if(m.role!=='user'||!m.content.some(b=>b.avio_photo)){out.push(m);continue}
-    const c=[];for(const b of m.content){if(!b.avio_photo){c.push(b);continue}
-      const u=await phData(b.avio_photo);
+  for(const m of msgs){if(m.role!=='user'||!m.content.some(phIdOf)){out.push(m);continue}
+    const c=[];for(const b of m.content){if(!phIdOf(b)){c.push(b);continue}
+      const u=await phData(phIdOf(b));
       c.push(u?{type:'image',source:{type:'base64',media_type:'image/jpeg',data:u.slice(u.indexOf(',')+1)}}:{type:'text',text:'[A photo was attached on another device and is not available here.]'})}
     out.push({...m,content:c})}
   return out;
 }
-const photoIds=m=>(m.content||[]).filter(b=>b.avio_photo).map(b=>b.avio_photo);
+const photoIds=m=>(m.content||[]).filter(phIdOf).map(phIdOf);
 function phEls(ids,{remove}={}){ // thumbnails; tap to view
   const frag=document.createDocumentFragment();
   for(const id of ids){const w=document.createElement('div');w.className='phwrap';
