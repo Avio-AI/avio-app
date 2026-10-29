@@ -548,7 +548,7 @@ body.melonly .tab[data-tab=describe],body.melonly .tab[data-tab=search],body.mel
 .ptable .sub{font-size:11.5px;color:var(--text-dim);margin-top:2px}
 .ptable .sub .dlink{padding:1px 7px;font-size:11px;border-radius:6px;margin:2px 0 0;display:inline-block;line-height:1.5}
 #modal.kbup{bottom:auto;align-items:flex-end}#modal.kbup .sheet{max-height:100%;border-radius:20px 20px 0 0}#modal.kbup .sheet:before{display:none}
-.dictrow{display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap}.dictrow .hint{margin:0}
+.dictrow{display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap}.dictrow .hint{margin:0;flex:1;min-width:0}.dictrow .phbtn{margin:0 0 0 auto}
 #dictBtn{display:inline-flex;align-items:center;justify-content:center;gap:6px;line-height:1}#dictBtn .ms{font-size:20px;margin:0}
 #dictBtn[aria-pressed=true]{background:var(--red,#d93025);color:#fff;border-color:transparent}#dictBtn[aria-pressed=true] .ms{animation:dictpulse 1.2s ease-in-out infinite}
 @keyframes dictpulse{0%,100%{opacity:1}50%{opacity:.35}}
@@ -640,9 +640,8 @@ html.sysbar{--safe-b:0px}
         <div class="card" id="describeCard">
           <h3>What's happening?</h3>
           <textarea id="descText" rows="5" placeholder="Describe the squawk in your own words: what the crew saw, when it happened, what it did, what changed. E.g. 'Cabin altitude crept up to 9,200 ft in cruise at FL410, a pressurization caution posted briefly then cleared. Outflow valve looked full closed on the synoptic.'"></textarea>
-          <div class="dictrow"><button type="button" class="btn2 small" id="dictBtn" aria-pressed="false"><span class="ms">mic</span><span class="dl">Dictate</span></button><span class="hint" id="dictHint"></span></div>
+          <div class="dictrow"><button type="button" class="btn2 small" id="dictBtn" aria-pressed="false"><span class="ms">mic</span><span class="dl">Dictate</span></button><span class="hint" id="dictHint"></span><label class="btn2 small phbtn"><span class="ms">add_a_photo</span>Add Photo<input type="file" id="descPhotoIn" accept="image/*" multiple style="display:none"></label></div>
           <div class="phrow" id="descPhotos"></div>
-          <label class="btn2 small phbtn"><span class="ms">add_a_photo</span>Add Photo<input type="file" id="descPhotoIn" accept="image/*" multiple style="display:none"></label>
         </div>
 
         <div class="card">
