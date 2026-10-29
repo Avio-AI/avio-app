@@ -568,6 +568,19 @@ body.melonly .tab[data-tab=describe],body.melonly .tab[data-tab=search],body.mel
 .fleetbar button{margin-left:auto;flex-shrink:0}
 html.sysbar{--safe-b:0px}
 #composer .qchips{justify-content:center}
+.ibbar{display:flex;align-items:center;gap:10px;background:var(--tonal);color:var(--on-tonal);padding:8px 12px 8px 16px;font-size:14px}
+.ibbar button{margin-left:auto;flex-shrink:0}
+.iblist .ibi{border:1px solid var(--border);border-radius:14px;padding:12px;margin:10px 0}
+.iblist .ibh{display:flex;gap:8px;justify-content:space-between;font-size:14px}.iblist .ibh span{color:var(--text-dim);font-size:12.5px;white-space:nowrap}
+.iblist .ibs{font-weight:500;margin:4px 0;overflow-wrap:anywhere}.iblist .ibt{font-size:13.5px;color:var(--text-dim);white-space:pre-wrap;overflow-wrap:anywhere;max-height:9em;overflow:hidden}
+.iblist .iba{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;font-size:12.5px}.iblist .iba>span{display:inline-flex;align-items:center;gap:3px;background:var(--surface2,var(--hover));border-radius:8px;padding:2px 8px}
+.iblist .iba .ms{font-size:15px}
+.casetagrow{border:1px solid var(--border);border-radius:14px;padding:10px 12px;margin-bottom:12px;display:flex;flex-direction:column;gap:8px}
+.casetagrow .ctl{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.casetagrow code{font-size:13.5px;background:var(--hover);padding:3px 8px;border-radius:8px}
+.casetagrow .tkt{display:inline-flex;align-items:center;gap:4px;background:var(--tonal);color:var(--on-tonal);border-radius:8px;padding:2px 4px 2px 8px;font-size:13.5px}
+.casetagrow .tkt button{border:none;background:none;color:inherit;cursor:pointer;font-size:12px;padding:0 4px}
+.docrow{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.docchip{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--border2,var(--border));background:none;color:inherit;border-radius:10px;padding:4px 10px;font:inherit;font-size:13px;cursor:pointer}
+.docchip .ms{font-size:18px;color:var(--red)}
 </style>
 </head>
 <body>
@@ -1694,7 +1707,7 @@ async function openBrief(){
 }
 /* ── email the brief: a draft in the user's email app ── */
 const MAIL_KEY='avio_mail';
-function briefSubject(c){const f=c.form||{},b=c.brief;return `${[f.reg,APPNAME].filter(Boolean).join(' ')} ${c.status==='closed'?'CLOSED':'case brief'} (${c.status==='closed'?'Resolved':b.status}): ${b.headline}`.replace(/\s+/g,' ').slice(0,180)}
+function briefSubject(c){const f=c.form||{},b=c.brief;return `${caseTagText(c)} ${[f.reg,APPNAME].filter(Boolean).join(' ')} ${c.status==='closed'?'CLOSED':'case brief'} (${c.status==='closed'?'Resolved':b.status}): ${b.headline}`.replace(/\s+/g,' ').slice(0,180)}
 function briefMailBody(c){let t=briefText(c);if(t.length>6000)t=t.slice(0,5900)+'\n…(continued in the brief PDF)';return t+'\n\n— Sent from Avio.AI'}
 function emailBrief(c,out){
   const m=store.get(MAIL_KEY,{to:'',cc:''});
@@ -1914,6 +1927,7 @@ function renderCase(){
       const t=vis.map(b=>b.text).join('\n');
       if(t.startsWith('NEW TROUBLESHOOTING CASE')){d.innerHTML=`<div class="casehdr">▸ CASE OPENED</div>${esc(t.replace(/^NEW TROUBLESHOOTING CASE\n?/,'').replace(/\nPhotos attached: \d+$/,''))}`}else d.textContent=t;
       if(ph.length){const r=document.createElement('div');r.className='phrow';r.appendChild(phEls(ph));d.appendChild(r)}
+      {const dc=typeof docChips==='function'&&docChips(m);if(dc)d.appendChild(dc)}
       log.appendChild(d);
     }else{
       if(!aiWrap){aiWrap=document.createElement('div');aiWrap.className='msg ai';log.appendChild(aiWrap)}
@@ -4021,6 +4035,212 @@ function openShareSetup(){const u=setupLinkFor();
       bar.querySelector('button').onclick=()=>{try{cfg.active=e.src.id;applySource();saveCfg();localStorage.setItem('avio_ac',JSON.stringify({src:e.src.id,type:e.t.id}));localStorage.setItem(pfxFor(e.src.id,e.t.id)+'_pendingtail',JSON.stringify({reg:v,sn:t.get(v)||''}))}catch(err){}location.reload()};
       (reg.closest('.card')||reg.parentElement).appendChild(bar);break}});
 })();
+
+/* ═════════ Case email: case tags, ticket numbers, the mail watcher and the case inbox ═════════
+   Every case has a tag, [Case <TAIL>-<CODE>], put in the subject of every email the app writes (copy it into your own).
+   A mail watcher the operator runs (mail/worker.js) saves emails that carry a tag, a ticket number recorded on a case,
+   or come from a watched sender, to inbox/<id>.json in the cases repo (attachments under inbox/files/), and notifies the
+   phone. Here they are matched to a case (ticket → tag → email thread → tail number → the AI) and imported on a tap. */
+const MW_KEY='avio_mailwatch',IB_KEY='avio_inbox',IB_PEND='avio_pendingimport';
+function mwCfg(){return {url:'',key:'',...store.get(MW_KEY,{})}}
+function mwOn(){const c=mwCfg();return !!(c.url&&c.key)}
+async function mwApi(path,body){const c=mwCfg();
+  const r=await fetch(c.url.replace(/\/+$/,'')+path,{method:body?'POST':'GET',headers:{authorization:'Bearer '+c.key,...(body?{'content-type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,cache:'no-store'});
+  const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(r.status===401?'The mail watcher did not accept the key.':(j.error||'Mail watcher error '+r.status));return j}
+function fnv32(s){let h=0x811c9dc5;for(const ch of String(s)){h^=ch.charCodeAt(0);h=Math.imul(h,0x01000193)>>>0}return h}
+function caseTag(c){const reg=String((c.form&&c.form.reg)||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,10)||'CASE';return reg+'-'+fnv32(c.id).toString(36).toUpperCase().padStart(4,'0').slice(-4)}
+const caseTagText=c=>`[Case ${caseTag(c)}]`;
+// every case on this device, every aircraft
+function allCaseStores(){const out=[];
+  try{for(const k of Object.keys(localStorage)){const m=k.match(/^(avio_.+)_cases$/);if(!m)continue;let L;try{L=JSON.parse(localStorage.getItem(k))}catch(e){continue}
+    if(Array.isArray(L))out.push({pfx:m[1],cases:L.filter(c=>c&&c.id&&c.msgs)})}}catch(e){}
+  return out}
+function pfxEntry(pfx){return fleetEntries().find(e=>!e.t.pending&&!e.t.gone&&pfxFor(e.src.id,e.t.id)===pfx)||null}
+function pfxName(pfx){const e=pfxEntry(pfx);return e?(e.t.name||e.t.id||srcLabel(e.src)):pfx===PFX?APPNAME:pfx.replace(/^avio_/,'')}
+function allTickets(){return [...new Set(allCaseStores().flatMap(s=>s.cases.flatMap(c=>c.tickets||[])))]}
+async function mwPushTickets(){if(!mwOn())return;try{await mwApi('/config',{tickets:allTickets()})}catch(e){console.warn(e)}}
+
+// ───────── inbox (inbox/<id>.json in the cases repo; status written back so every device agrees)
+async function ibRefresh(){
+  if(!syOn())return [];
+  const r=await syApi('inbox');if(r.status===404)return [];if(!r.ok)throw new Error(syErr(r));
+  const files=(await r.json()).filter(f=>f.type==='file'&&f.name.endsWith('.json'));const cache=store.get(IB_KEY,{});
+  for(const f of files){const id=f.name.slice(0,-5);if(cache[id]&&cache[id].sha===f.sha)continue;
+    const g=await syApi(`inbox/${f.name}`,{raw:true});if(!g.ok)continue;try{const it=JSON.parse(await g.text());it.sha=f.sha;cache[id]=it}catch(e){}}
+  for(const id of Object.keys(cache))if(!files.some(f=>f.name===id+'.json'))delete cache[id];
+  store.set(IB_KEY,cache);renderIbBar();return ibPending()}
+function ibPending(){return Object.values(store.get(IB_KEY,{})).filter(i=>i&&!i.done).sort((a,b)=>(b.date||0)-(a.date||0))}
+async function ibMark(it,done){
+  const path=`inbox/${it.id}.json`;let sha=null;const g=await syApi(path);if(g.ok)sha=(await g.json()).sha;
+  const x={...it,done};delete x.sha;
+  const r=await syApi(path,{method:'PUT',body:JSON.stringify({message:`inbox ${done.action}: ${it.subject||it.id}`.slice(0,120),content:b64utf8(JSON.stringify(x,null,1)),...(sha?{sha}:{})})});
+  const cache=store.get(IB_KEY,{});cache[it.id]={...x,sha:r.ok?((await r.json()).content||{}).sha:sha};store.set(IB_KEY,cache);renderIbBar();
+  if(!r.ok)throw new Error(syErr(r))}
+function renderIbBar(){
+  let bar=$('#ibBar');const n=ibPending().length;
+  if(!n){if(bar)bar.remove();return}
+  if(!bar){bar=document.createElement('div');bar.id='ibBar';bar.className='ibbar';const hd=document.querySelector('header');(hd||document.body).insertAdjacentElement('afterend',bar)}
+  bar.innerHTML=`<span class="ms">mark_email_unread</span><span>${n} case email${n===1?'':'s'} to file</span><button class="btn small" type="button">Review</button>`;
+  bar.querySelector('button').onclick=()=>openInbox()}
+
+// ───────── matching an email to a case
+const _alnum=s=>String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+async function ibMatch(it){
+  const S=allCaseStores(),all=S.flatMap(s=>s.cases.map(c=>({c,pfx:s.pfx})));
+  const tk=(it.tickets||[]);
+  let h=all.find(x=>(x.c.tickets||[]).some(t=>tk.includes(t)||String(it.subject||'').includes(t)));if(h)return {...h,how:'Ticket '+((h.c.tickets||[]).find(t=>tk.includes(t)||String(it.subject||'').includes(t)))};
+  if(it.tag){h=all.find(x=>caseTag(x.c)===String(it.tag).toUpperCase());if(h)return {...h,how:'Case tag'}}
+  h=all.find(x=>((x.c.mail&&x.c.mail.threads)||[]).includes(it.threadId));if(h)return {...h,how:'Same email thread'};
+  const hay=_alnum((it.subject||'')+' '+(it.text||'').slice(0,4000));
+  const byTail=all.filter(x=>{const r=_alnum(x.c.form&&x.c.form.reg);return r.length>=3&&hay.includes(r)}).sort((a,b)=>((a.c.status==='closed')-(b.c.status==='closed'))||((b.c.updated||0)-(a.c.updated||0)));
+  if(byTail.length)return {...byTail[0],how:'Tail '+String(byTail[0].c.form.reg).toUpperCase()};
+  if(!cfg.anthropicKey)return null;
+  const recent=all.filter(x=>x.c.status!=='closed').sort((a,b)=>(b.c.updated||0)-(a.c.updated||0)).slice(0,15);if(!recent.length)return null;
+  const list=recent.map((x,i)=>`${i+1}. ${pfxName(x.pfx)} · ${caseListLabel(x.c)} · ${x.c.title||''}${x.c.brief?' · '+x.c.brief.headline:''}`).join('\n');
+  try{const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':cfg.anthropicKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:briefModel(),max_tokens:200,system:'You match an email to the aircraft troubleshooting case it belongs to. Reply with JSON only: {"n": <case number or 0 if none fits>, "why": "<8 words>"}',
+        messages:[{role:'user',content:`Open cases:\n${list}\n\nEmail from ${it.fromName||''} <${it.from||''}>\nSubject: ${it.subject||''}\n\n${String(it.text||'').slice(0,3000)}`}]})});
+    if(!res.ok)return null;const j=await res.json();const t=(j.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');const o=JSON.parse((t.match(/\{[\s\S]*\}/)||['{}'])[0]);
+    const x=recent[(+o.n||0)-1];return x?{...x,how:'Suggested by Claude'+(o.why?': '+o.why:'')}:null}catch(e){return null}}
+
+// ───────── review sheet
+function ibCaseLabel(x){const c=x.c,reg=String((c.form&&c.form.reg)||'').toUpperCase()||'No tail';const what=c.named&&c.title?c.title:(c.brief&&c.brief.headline)||c.title||'Case';return `${reg} · ${what}${c.status==='closed'?' (closed)':''} · ${pfxName(x.pfx)} · ${dmy(new Date(c.created||c.updated))}`}
+async function openInbox(focus){
+  const L=ibPending();if(focus){const i=L.findIndex(x=>x.id===focus);if(i>0)L.unshift(...L.splice(i,1))}
+  if(!L.length){showModal('CASE EMAIL',`<div class="kv">${focus?'That email has already been filed.':'No case emails waiting.'}</div>`);return}
+  const S=allCaseStores(),opts=S.flatMap(s=>s.cases.map(c=>({c,pfx:s.pfx}))).sort((a,b)=>(b.c.updated||0)-(a.c.updated||0)).slice(0,60);
+  const optHtml=sel=>`<option value="">Choose a case…</option>`+opts.map((x,i)=>`<option value="${i}" ${sel&&sel.c.id===x.c.id&&sel.pfx===x.pfx?'selected':''}>${esc(ibCaseLabel(x))}</option>`).join('');
+  showModal('CASE EMAIL',`<div class="kv">Emails about your cases. Check the case, then import: the email and its attachments are added to the case and the assistant updates the troubleshooting.</div>
+    <div class="iblist">${L.map((it,j)=>`<div class="ibi" data-j="${j}">
+      <div class="ibh"><b>${esc(it.fromName||it.from||'')}</b><span>${esc(dmyt(it.date))}</span></div>
+      <div class="ibs">${esc(it.subject||'(no subject)')}</div>
+      <div class="ibt">${esc(String(it.text||'').slice(0,320))}${String(it.text||'').length>320?'…':''}</div>
+      ${(it.attachments||[]).length?`<div class="iba">${it.attachments.map(a=>`<span><span class="ms">attach_file</span>${esc(a.name)}${a.skipped?' (too large)':''}</span>`).join('')}</div>`:''}
+      <div class="field" style="margin:8px 0 4px"><select data-j="${j}"><option>Matching…</option></select><div class="hint ibhow" data-j="${j}"></div></div>
+      <div class="grid2"><button class="btn" data-imp="${j}" disabled>Import</button><button class="btn2" data-dis="${j}">Dismiss</button></div><div class="ibout" data-j="${j}"></div></div>`).join('')}</div>`);
+  L.forEach(async(it,j)=>{const m=await ibMatch(it);const sel=document.querySelector(`.iblist select[data-j="${j}"]`);if(!sel)return;
+    sel.innerHTML=optHtml(m);document.querySelector(`.ibhow[data-j="${j}"]`).textContent=m?'Matched by: '+m.how:'No matching case found: choose one.';
+    const b=document.querySelector(`[data-imp="${j}"]`);b.disabled=!m;sel.onchange=()=>{b.disabled=sel.value===''}});
+  $$('.iblist [data-imp]').forEach(b=>b.onclick=async()=>{const j=+b.dataset.imp,it=L[j],v=document.querySelector(`.iblist select[data-j="${j}"]`).value;if(v==='')return;
+    const x=opts[+v];b.disabled=true;b.textContent='Importing…';
+    try{await ibImportTo(it,x.pfx,x.c.id)}catch(e){b.disabled=false;b.textContent='Import';document.querySelector(`.ibout[data-j="${j}"]`).innerHTML=`<div class="errbox">${esc(e.message||e)}</div>`}});
+  $$('.iblist [data-dis]').forEach(b=>b.onclick=async()=>{const j=+b.dataset.dis;b.disabled=true;try{await ibMark(L[j],{action:'dismissed',at:Date.now(),by:syCfg().tech||''});openInbox()}catch(e){b.disabled=false;document.querySelector(`.ibout[data-j="${j}"]`).innerHTML=`<div class="errbox">${esc(e.message||e)}</div>`}});
+}
+async function ibImportTo(it,pfx,caseId){
+  if(pfx!==PFX){const e=pfxEntry(pfx);if(!e)throw new Error('That aircraft is not connected on this device.');
+    store.set(IB_PEND,{id:it.id,pfx,caseId});try{localStorage.setItem(pfx+'_current',JSON.stringify(caseId))}catch(x){}
+    cfg.active=e.src.id;applySource();saveCfg();localStorage.setItem('avio_ac',JSON.stringify({src:e.src.id,type:e.t.id}));location.reload();return}
+  const c=loadCases().find(x=>x.id===caseId);if(!c)throw new Error('That case is not on this device.');
+  hideModal();CASE=c;try{localStorage.setItem(PFX+'_current',JSON.stringify(c.id))}catch(e){}showChat();renderCase();
+  await ibImport(it)}
+async function ibAttachmentBlocks(it){
+  const blocks=[],notes=[];
+  for(const a of it.attachments||[]){
+    if(!a.path){notes.push(`${a.name} (${a.skipped||'not saved'})`);continue}
+    let blob=null;try{const r=await syApi(a.path,{raw:true});if(r.ok)blob=await r.blob()}catch(e){}
+    if(!blob){notes.push(`${a.name} (could not be downloaded)`);continue}
+    const mime=a.mime||blob.type||'';const ext=(a.name.split('.').pop()||'').toLowerCase();
+    if(/^image\/(jpe?g|png|gif|webp|heic|heif)/.test(mime)||/^(jpe?g|png|gif|webp|heic)$/.test(ext)){try{blocks.push({type:'image',avio_photo:await phFromFile(new File([blob],a.name,{type:mime||'image/jpeg'}))});continue}catch(e){}}
+    if(mime==='application/pdf'||ext==='pdf'){const id='doc_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);await phPut({id,blob:new Blob([blob],{type:'application/pdf'}),w:0,h:0,t:Date.now(),kind:'pdf'});
+      blocks.push({type:'document',avio_doc:id,name:a.name,repo:a.path});continue}
+    if(/^text\/|json|xml|csv/.test(mime)||/^(txt|csv|log|xml|json|tsv|md)$/.test(ext)){const t=await blob.text();blocks.push({type:'text',text:`Attachment ${a.name}:\n\`\`\`\n${t.slice(0,30000)}${t.length>30000?'\n…(cut)':''}\n\`\`\``});continue}
+    notes.push(`${a.name} (${mime||ext||'file'}: not readable here; open it from the email)`)}
+  return {blocks,notes}}
+async function ibImport(it){
+  const c=CASE;if(!c)return;
+  const {blocks,notes}=await ibAttachmentBlocks(it);
+  const head=`EMAIL ${it.mine?'SENT':'RECEIVED'} · ${dmyt(it.date)}\nFrom: ${it.fromName?it.fromName+' <'+it.from+'>':it.from}${it.to?'\nTo: '+it.to:''}${it.cc?'\nCc: '+it.cc:''}\nSubject: ${it.subject||''}\n\n${it.text||'(no text)'}`+
+    ((it.attachments||[]).length?`\n\nAttachments: ${it.attachments.map(a=>a.name).join(', ')}`:'')+(notes.length?`\nNot included: ${notes.join('; ')}`:'');
+  const ask='\n\n(Imported email. Say briefly what it adds, then update the assessment and the next steps.)';
+  const content=[...blocks,{type:'text',text:head+ask}];
+  if(c.status==='closed'){c.status='open';delete c.closedAt;delete c.closedBy}
+  const last=c.msgs[c.msgs.length-1];if(last&&last.role==='user')last.content.push(...content);else c.msgs.push({role:'user',content});
+  c.mail=c.mail||{threads:[],items:[]};if(!c.mail.threads.includes(it.threadId))c.mail.threads.push(it.threadId);c.mail.items.push({id:it.id,from:it.from,subject:it.subject,date:it.date});
+  const tk=(it.tickets||[])[0];if(tk){c.tickets=c.tickets||[];if(!c.tickets.includes(tk))c.tickets.push(tk)}
+  saveCase();renderCase();
+  try{await ibMark(it,{action:'imported',case:c.id,aircraft:APPNAME,at:Date.now(),by:syCfg().tech||''})}catch(e){console.warn(e)}
+  if(typeof syFlush==='function'){syMark(c.id,true);syFlush().catch(()=>{})}
+  mwPushTickets();
+  if(cfg.anthropicKey&&!BUSY)runAgent()}
+
+// PDFs from email attachments: kept in the photo store as {id, blob}; on other devices fetched from the cases repo
+async function docData(b){
+  let u=null;try{const rec=await phTx('readonly',st=>st.get(b.avio_doc));if(rec&&rec.blob)u=await new Promise(ok=>{const fr=new FileReader();fr.onload=()=>ok(String(fr.result));fr.onerror=()=>ok(null);fr.readAsDataURL(rec.blob)})}catch(e){}
+  if(!u&&b.repo&&syOn()){try{const r=await syApi(b.repo,{raw:true});if(r.ok){const blob=await r.blob();await phPut({id:b.avio_doc,blob:new Blob([blob],{type:'application/pdf'}),w:0,h:0,t:Date.now(),kind:'pdf'});u=await new Promise(ok=>{const fr=new FileReader();fr.onload=()=>ok(String(fr.result));fr.readAsDataURL(blob)})}}catch(e){}}
+  return u}
+{const _xp=expandPhotos;expandPhotos=async function(msgs){
+  const out=await _xp(msgs);
+  return Promise.all(out.map(async m=>{if(m.role!=='user'||!Array.isArray(m.content)||!m.content.some(b=>b&&b.avio_doc))return m;
+    const c=[];for(const b of m.content){if(!b||!b.avio_doc){c.push(b);continue}const u=await docData(b);
+      c.push(u?{type:'document',source:{type:'base64',media_type:'application/pdf',data:u.slice(u.indexOf(',')+1)},title:b.name||'Attachment'}:{type:'text',text:`[Attachment ${b.name||''} is not available on this device.]`})}
+    return {...m,content:c}}))}}
+function docChips(m){const D=(m.content||[]).filter(b=>b&&b.avio_doc);if(!D.length)return null;const w=document.createElement('div');w.className='docrow';
+  for(const b of D){const x=document.createElement('button');x.type='button';x.className='docchip';x.innerHTML=`<span class="ms">picture_as_pdf</span>${esc(b.name||'Attachment.pdf')}`;
+    x.onclick=async()=>{const u=await docData(b);if(!u){showModal('ATTACHMENT','<div class="kv">This attachment is not on this device. Turn on case sync to fetch it.</div>');return}
+      const bl=await (await fetch(u)).blob();window.open(URL.createObjectURL(bl),'_blank')};w.appendChild(x)}
+  return w}
+
+// ───────── case tag + ticket numbers in the Case Brief sheet
+{const _ob=openBrief;openBrief=async function(){await _ob.apply(this,arguments);const c=CASE;if(!c)return;const mb=$('#modalBody');if(!mb||mb.querySelector('.casetagrow'))return;
+  const box=document.createElement('div');box.className='casetagrow';
+  const draw=()=>{box.innerHTML=`<div class="ctl"><span class="hint" style="margin:0">Email tag</span><code>${esc(caseTagText(c))}</code><button class="btn2 small" type="button" id="ctCopy">Copy</button></div>
+    <div class="ctl"><span class="hint" style="margin:0">Ticket numbers</span>${(c.tickets||[]).map((t,i)=>`<span class="tkt">${esc(t)}<button type="button" data-tk="${i}" aria-label="Remove">✕</button></span>`).join('')||'<span class="hint" style="margin:0">none yet</span>'}</div>
+    <div class="ctl"><input id="ctNew" placeholder="Add a ticket number" autocapitalize="characters" style="flex:1"><button class="btn2 small" type="button" id="ctAdd">Add</button></div>
+    <div class="hint" style="margin:2px 0 0">Put the tag in the subject of emails about this case (the brief email has it). Replies with the tag or a ticket number come back into this case.</div>`;
+    box.querySelector('#ctCopy').onclick=async()=>{try{await navigator.clipboard.writeText(caseTagText(c));box.querySelector('#ctCopy').textContent='✔ Copied'}catch(e){}};
+    box.querySelector('#ctAdd').onclick=()=>{const v=box.querySelector('#ctNew').value.trim().replace(/^#/,'');if(v.length<4)return;c.tickets=c.tickets||[];if(!c.tickets.includes(v))c.tickets.push(v);saveCase();if(typeof syMark==='function'){syMark(c.id,true);syFlush().catch(()=>{})}mwPushTickets();draw()};
+    box.querySelectorAll('[data-tk]').forEach(b=>b.onclick=()=>{c.tickets.splice(+b.dataset.tk,1);saveCase();if(typeof syMark==='function'){syMark(c.id,true);syFlush().catch(()=>{})}mwPushTickets();draw()})};
+  draw();mb.insertBefore(box,mb.firstChild)}}
+
+// ───────── settings: mail watcher, Gmail, notifications
+async function mwEnablePush(){
+  const ios=/iPhone|iPad|iPod/.test(navigator.userAgent),standalone=navigator.standalone||matchMedia('(display-mode: standalone)').matches;
+  if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window))throw new Error(ios&&!standalone?'On iPhone, add Avio.AI to the Home Screen and open it from there, then turn on notifications.':'This browser cannot show notifications.');
+  const perm=await Notification.requestPermission();if(perm!=='granted')throw new Error('Notifications are not allowed. Allow them for Avio.AI in the phone settings, then try again.');
+  const reg=await navigator.serviceWorker.register('sw.js');await navigator.serviceWorker.ready;
+  const st=await mwApi('/status');let sub=await reg.pushManager.getSubscription();
+  const key=Uint8Array.from(atob(st.vapid.replace(/-/g,'+').replace(/_/g,'/')+'==='.slice((st.vapid.length+3)%4)),ch=>ch.charCodeAt(0));
+  if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:key});
+  await mwApi('/subscribe',{subscription:sub.toJSON()})}
+function mailSettingsHtml(){const m=mwCfg();
+  return `<hr style="border:none;border-top:1px solid var(--border);margin:14px 0">
+  <h3 class="amh">Case Email</h3>
+  <div class="hint" style="margin-bottom:8px">Replies from tech ops, crew or maintenance come into the case they belong to. A mail watcher you run once checks your mailbox for emails with a case tag or ticket number, or from the senders below, saves them to your cases repo and notifies this phone. Needs case history sync.</div>
+  <div class="field"><label>Mail watcher address</label><input id="mwUrl" value="${esc(m.url)}" placeholder="https://avio-mail.your-account.workers.dev" autocapitalize="off" autocomplete="off"></div>
+  <div class="field"><label>Mail watcher key</label><input id="mwKey" type="password" value="${esc(m.key)}" placeholder="The key set on the mail watcher" autocomplete="off"></div>
+  <div class="field"><label>Watched senders (one per line: an address, or @domain for everyone there)</label><textarea id="mwSenders" rows="3" placeholder="techops@your-oem.com&#10;@your-company.com" autocapitalize="off"></textarea></div>
+  <div class="grid2"><button class="btn2 small" type="button" id="mwGmail">Connect Mailbox</button><button class="btn2 small" type="button" id="mwPush">Turn On Notifications</button></div>
+  <div class="grid2" style="margin-top:8px"><button class="btn2 small" type="button" id="mwCheck">Check Mail Now</button><button class="btn2 small" type="button" id="mwTest">Test Notification</button></div>
+  <div class="hint" id="mwStat" style="margin-top:8px"></div>`}
+function mailSettingsBind(){
+  const st=(t,err)=>{const e=$('#mwStat');if(e)e.innerHTML=err?`<span style="color:var(--red)">${esc(t)}</span>`:t};
+  const save=()=>{const c={url:$('#mwUrl').value.trim(),key:$('#mwKey').value.trim()};store.set(MW_KEY,c)};
+  const status=async()=>{if(!mwOn()){st('Not set up.');return}
+    try{const s=await mwApi('/status');const ta=$('#mwSenders');if(ta&&document.activeElement!==ta)ta.value=(s.senders||[]).join('\n');
+      st(`Mailbox: <code>${esc(s.gmail||'not connected')}</code> · last checked ${s.last?esc(dmyt(s.last*1000)):'never'} · ${s.subs} phone${s.subs===1?'':'s'} notified · ${s.tickets} ticket${s.tickets===1?'':'s'} watched${s.lastError?` · <span style="color:var(--red)">${esc(s.lastError)}</span>`:''}${syOn()?'':' · <span style="color:var(--amber)">turn on case history sync</span>'}`)}catch(e){st(e.message,true)}};
+  ['mwUrl','mwKey'].forEach(id=>$('#'+id).addEventListener('change',()=>{save();status()}));
+  $('#mwSenders').addEventListener('change',async()=>{save();try{await mwApi('/config',{senders:$('#mwSenders').value.split(/[\n,;]+/).map(s=>s.trim()).filter(Boolean)});status()}catch(e){st(e.message,true)}});
+  $('#mwGmail').onclick=()=>{save();if(!mwOn()){st('Enter the mail watcher address and key first.',true);return}const c=mwCfg();window.open(c.url.replace(/\/+$/,'')+'/auth/start?k='+encodeURIComponent(c.key),'_blank');st('Finish the sign-in in the page that opened, then come back here.')};
+  $('#mwPush').onclick=async()=>{save();const b=$('#mwPush');b.disabled=true;try{await mwEnablePush();st('✔ Notifications are on for this phone.');status()}catch(e){st(e.message,true)}finally{b.disabled=false}};
+  $('#mwCheck').onclick=async()=>{save();const b=$('#mwCheck');b.disabled=true;b.textContent='Checking…';try{const r=await mwApi('/poll',{});await ibRefresh();st(r.ok?`Checked ${r.checked} new email${r.checked===1?'':'s'}; ${r.saved} saved for your cases.`:esc(r.reason||'Not checked'));if(ibPending().length)renderIbBar()}catch(e){st(e.message,true)}finally{b.disabled=false;b.textContent='Check Mail Now'}};
+  $('#mwTest').onclick=async()=>{save();try{const r=await mwApi('/test',{});st(r.sent?'Test notification sent.':'No phone has notifications on yet: tap Turn On Notifications.')}catch(e){st(e.message,true)}};
+  status()}
+{const _os=openSettings;openSettings=function(){_os.apply(this,arguments);const sv=$('#stSave');if(!sv||$('#mwUrl'))return;sv.insertAdjacentHTML('beforebegin',mailSettingsHtml());mailSettingsBind()}}
+
+// ───────── start-up: check the inbox, open what a notification pointed at, finish an import started on another aircraft
+let IB_LAST=0;
+function ibCheck(){if(!syOn()||Date.now()-IB_LAST<30000)return Promise.resolve([]);IB_LAST=Date.now();return ibRefresh().catch(e=>{console.warn(e);return []})}
+async function mailBoot(){
+  renderIbBar();
+  const q=new URLSearchParams(location.search),want=q.get('inbox');
+  if(want!==null){try{history.replaceState(null,'',location.pathname+location.hash)}catch(e){}}
+  const pend=store.get(IB_PEND,null);
+  if(pend&&pend.pfx===PFX){store.del(IB_PEND);const it=(store.get(IB_KEY,{}))[pend.id];const c=loadCases().find(x=>x.id===pend.caseId);
+    if(it&&c&&!it.done){CASE=c;showChat();renderCase();ibImport(it).catch(e=>showModal('CASE EMAIL',`<div class="errbox">${esc(e.message||e)}</div>`));return}}
+  await ibCheck();
+  if(want!==null)openInbox(want||undefined)}
+if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',e=>{if(e.data&&'inbox' in e.data){IB_LAST=0;ibCheck().then(()=>openInbox(e.data.inbox||undefined))}});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')ibCheck()});
 /* ═════════════════ BOOT ═════════════════ */
 (async function boot(){
   renderFaultChips();renderFollowChips();
@@ -4028,6 +4248,7 @@ function openShareSetup(){const u=setupLinkFor();
   if(!dataConnected()){setDot('err');renderBadges('Not connected — open Settings');openSettings(null,true);return}
   await loadCore();
   setTimeout(()=>refreshFleetInfo().catch(()=>{}),1500);
+  setTimeout(()=>mailBoot().catch(e=>console.warn(e)),0);
   if(!DATA.ready){const e=$('#badges').dataset.err;if(e)openSettings('Could not load your data: '+e);return}
   if(FC&&FC.mode==='mel'){const mi=$('#melInput');if(mi)mi.placeholder='Inoperative item or CAS message, e.g. Pack, Weather Radar, 21-1';const t=document.querySelector('.tab[data-tab=mel]');if(t)t.click();return}
   const cur=store.get(PFX+'_current',null);
