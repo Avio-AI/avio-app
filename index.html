@@ -560,6 +560,10 @@ body.melonly .tab[data-tab=describe],body.melonly .tab[data-tab=search],body.mel
 .implist .row:last-child{border-bottom:none}.implist .row .lab{flex:1;min-width:0}.implist .row .lab div:last-child{font-size:12.5px;color:var(--text-dim)}
 .implist input[type=checkbox]{width:22px;height:22px;flex:0 0 auto;margin:0}
 .implist select{flex:0 0 40%;width:40%;min-width:0}
+.setuplist .row{padding:10px 0;border-bottom:1px solid var(--border)}.setuplist .row:last-child{border-bottom:none}
+.setuplist .hd{display:flex;gap:10px;align-items:center}.setuplist .hd input[type=checkbox]{width:22px;height:22px;flex:0 0 auto;margin:0}
+.setuplist .hd .lab{flex:1;min-width:0}.setuplist .hd .lab div:last-child{font-size:12.5px;color:var(--text-dim);overflow-wrap:anywhere}
+.setuplist .tok{margin:8px 0 0 32px}.setuplist .msg.err{color:var(--red);font-size:12.5px;margin:6px 0 0 32px}.setuplist .msg.ok{color:var(--green);font-size:12.5px;margin:6px 0 0 32px}
 </style>
 </head>
 <body>
@@ -2289,6 +2293,7 @@ function openSettings(note,welcome){
     <button class="btn2 small danger" id="stDevClear" style="margin-top:8px">Remove Imported Data From This Device</button>
   </div>
   <button class="btn2 small danger hidden" id="stSrcDel" style="margin:4px 0 10px">Remove This Connection</button>
+  ${cfg.sources.some(x=>x.mode==='github'||x.mode==='url')?'<button class="btn2 small" id="stShareSetup" style="margin:4px 0 10px 8px"><span class="ms">share</span>Share Setup Link</button>':''}
   <div id="stDemoNote" class="hint">The demo aircraft uses invented manuals, fault messages, wiring and MEL items so you can try every feature. None of it is real maintenance data.</div>
   <hr style="border:none;border-top:1px solid var(--border);margin:14px 0">
   <h3 class="amh">AI Assistant</h3>
@@ -2313,7 +2318,7 @@ function openSettings(note,welcome){
   devFileCount().then(n=>{const e=$('#stDevInfo');if(e)e.textContent=n?`${n.toLocaleString()} data files are stored on this device. Import again to replace them.`:'No data imported on this device yet. Pick your data set folder, or a .zip of it.'});
   const st=t=>{const e=$('#stStatus');if(e)e.innerHTML=t};
   const fill=()=>{const id=$('#stSrc').value,x=cfg.sources.find(y=>y.id===id)||{mode:'none'};$('#stMode').value=x.mode;$('#stRepo').value=x.repo||'';$('#stBranch').value=x.branch||'main';$('#stPath').value=x.path||'';$('#stDataUrl').value=x.url||'';$('#stTok').value=id==='__new'?(cfg.githubToken||''):(x.token||'');$('#stSrcDel').classList.toggle('hidden',id==='__new');sync()};
-  $('#stSrc').onchange=fill;
+  $('#stSrc').onchange=fill;{const b=$('#stShareSetup');if(b)b.onclick=openShareSetup}
   const collect=()=>{syFromSettings();Object.assign(cfg,{anthropicKey:$('#stKey').value.trim(),model:$('#stModel').value,thinking:$('#stThink').checked,remember:$('#stRemember').checked});
     const sel=$('#stSrc').value,mode=$('#stMode').value;
     if(mode!=='none'){const tok=$('#stTok').value.trim();if(tok)cfg.githubToken=tok;
@@ -3924,9 +3929,69 @@ function openImport(){
     $('#impOut').innerHTML=`<div class="kv" style="margin-top:10px">${total?`Imported ${total} case${total===1?'':'s'}: ${lines.join(' · ')}. Open them from Recent Cases.`:'Nothing imported: tick a set and choose its aircraft.'}</div>`;
     if(total){const c=loadCases();if(CASE)CASE=c.find(x=>x.id===CASE.id)||CASE;if(typeof syFlush==='function')syFlush().catch(()=>{})}};
 }
+
+/* ═════════ Setup link: …/#setup=<base64url JSON> adds the data connections it lists, one per tick ═════════
+   JSON {v:1, sources:[{name, mode:'github'|'url', repo, branch, path, url}], sync?:{repo}}. The link carries repo names and
+   web addresses only, never a token: each ticked GitHub connection asks for its own read-only token on this device. */
+const b64u={enc:s=>btoa(String.fromCharCode(...new TextEncoder().encode(s))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''),
+  dec:s=>new TextDecoder().decode(Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0)))};
+function parseSetup(){const m=location.hash.match(/^#setup=([A-Za-z0-9_-]+)/);if(!m)return null;
+  try{history.replaceState(null,'',location.pathname+location.search)}catch(e){}
+  try{const j=JSON.parse(b64u.dec(m[1]));const okRepo=r=>/^[\w.-]+\/[\w.-]+$/.test(r||'');
+    const src=(Array.isArray(j.sources)?j.sources:[]).map(x=>({name:String(x.name||'').slice(0,60),mode:x.mode==='url'?'url':'github',repo:String(x.repo||''),branch:String(x.branch||'main'),path:String(x.path||''),url:String(x.url||'')}))
+      .filter(x=>x.mode==='github'?okRepo(x.repo):/^https:\/\//.test(x.url)).slice(0,30);
+    const sync=j.sync&&okRepo(j.sync.repo)?{repo:j.sync.repo}:null;return src.length||sync?{sources:src,sync}:{bad:true}}catch(e){return {bad:true}}}
+const SETUP=parseSetup();
+window.addEventListener('hashchange',()=>{const S=parseSetup();if(S)openSetup(S)});
+const srcSame=(a,b)=>a.mode===b.mode&&(a.mode==='github'?String(a.repo).toLowerCase()===String(b.repo).toLowerCase()&&(a.path||'')===(b.path||''):a.url.replace(/\/?$/,'/')===b.url.replace(/\/?$/,'/'));
+function openSetup(S){
+  if(S.bad){showModal('SET UP CONNECTIONS','<div class="errbox">This setup link is damaged or incomplete. Ask for the link again.</div>');return}
+  const have=x=>cfg.sources.find(y=>srcSame(x,y));const sc=syCfg();
+  const rows=S.sources.map((x,i)=>{const h=have(x);return `<div class="row" data-i="${i}"><div class="hd"><input type="checkbox" data-i="${i}" ${h?'disabled':''}><div class="lab"><div>${esc(x.name||x.repo||x.url)}</div><div>${h?'Already connected on this device · ':''}${esc(x.mode==='github'?x.repo+(x.path?' / '+x.path:''):x.url.replace(/^https:\/\//,''))}</div></div></div>
+    ${x.mode==='github'?`<div class="tok hidden"><input type="password" data-i="${i}" placeholder="github_pat_… (read-only token for this repo)" autocomplete="off"></div>`:''}<div class="msg"></div></div>`}).join('');
+  const syncRow=S.sync?`<div class="row" data-sync="1"><div class="hd"><input type="checkbox" id="suSync" ${sc.on&&sc.repo===S.sync.repo?'checked disabled':''}><div class="lab"><div>Case history sync</div><div>${sc.on&&sc.repo===S.sync.repo?'Already on · ':''}${esc(S.sync.repo)} · keeps cases the same on every device</div></div></div>
+    <div class="tok hidden"><input type="password" id="suSyncTok" placeholder="github_pat_… (read and write on the cases repo)" autocomplete="off"><input id="suTech" style="margin-top:8px" value="${esc(sc.tech||'')}" placeholder="Your name, shown on the cases you start" autocapitalize="words"></div><div class="msg"></div></div>`:'';
+  showModal('SET UP CONNECTIONS',`<div class="kv">This link lists data connections for Avio.AI. Tick the ones you want on this device and paste the token for each. Tokens are never part of the link and stay on this device.</div>
+    <div class="setuplist">${rows}${syncRow}</div>
+    ${cfg.anthropicKey?'':`<div class="field" style="margin-top:10px"><label>Anthropic API key (for the AI assistant; optional now)</label><input id="suKey" type="password" placeholder="sk-ant-…" autocomplete="off"></div>`}
+    <button class="btn" id="suGo" style="margin-top:12px">Add Selected</button><div id="suOut" class="hint" style="margin-top:8px"></div>`);
+  $$('.setuplist .hd input[type=checkbox]').forEach(cb=>cb.onchange=()=>{const t=cb.closest('.row').querySelector('.tok');if(t)t.classList.toggle('hidden',!cb.checked)});
+  $('#suGo').onclick=async()=>{const out=$('#suOut');const picks=[];let bad=0;
+    $$('.setuplist .row[data-i]').forEach(r=>{const i=+r.dataset.i,cb=r.querySelector('input[type=checkbox]');const m=r.querySelector('.msg');m.className='msg';m.textContent='';if(!cb.checked||cb.disabled)return;
+      const x={...S.sources[i]},t=r.querySelector('.tok input');const tok=t?t.value.trim():'';
+      if(x.mode==='github'&&!tok){m.className='msg err';m.textContent='Paste the token for this repo.';bad++;return}picks.push({r,x:{mode:x.mode,repo:x.repo,branch:x.branch,path:x.path,url:x.url,token:x.mode==='github'?tok:''}})});
+    const sy=$('#suSync');const syOnNew=!!(sy&&sy.checked&&!sy.disabled);let syTokV='';
+    if(syOnNew){syTokV=$('#suSyncTok').value.trim();const m=sy.closest('.row').querySelector('.msg');m.className='msg';m.textContent='';if(!syTokV){m.className='msg err';m.textContent='Paste the token for the cases repo.';bad++}}
+    if(bad)return;if(!picks.length&&!syOnNew){out.textContent='Tick at least one connection.';return}
+    out.textContent='Checking…';$('#suGo').disabled=true;
+    const res=await Promise.all(picks.map(async p=>{try{const f=await srcJson(p.x,'fleet.json');const m=f||await srcJson(p.x,'manifest.json');return !!m}catch(e){return false}}));
+    let failed=0;picks.forEach((p,k)=>{const m=p.r.querySelector('.msg');if(res[k]){m.className='msg ok';m.textContent='✔ Opened'}else{failed++;m.className='msg err';m.textContent=p.x.mode==='github'?'Could not open this repo with that token. Check the token has Contents: Read-only on this repo.':'Could not open this web address.'}});
+    if(syOnNew){const m=sy.closest('.row').querySelector('.msg');try{const r=await fetch(`https://api.github.com/repos/${S.sync.repo}`,{headers:{Authorization:`Bearer ${syTokV}`,Accept:'application/vnd.github+json'},cache:'no-store'});
+      const j=r.ok?await r.json():null;if(j&&j.permissions&&j.permissions.push){m.className='msg ok';m.textContent='✔ Opened with write access'}else{failed++;m.className='msg err';m.textContent=r.ok?'This token can read the cases repo but not write to it: it needs Contents: Read and write.':'Could not open the cases repo with that token.'}}catch(e){failed++;m.className='msg err';m.textContent='Could not reach GitHub.'}}
+    $('#suGo').disabled=false;if(failed){out.textContent='Nothing was saved. Fix the marked rows and try again.';return}
+    const t0=Date.now().toString(36);picks.forEach((p,k)=>{cfg.sources.push({id:'s'+t0+k,...p.x})});
+    if(picks.length&&!activeSrc())cfg.active=cfg.sources.find(x=>srcSame(x,picks[0].x)).id;
+    {const k=$('#suKey');if(k&&k.value.trim())cfg.anthropicKey=k.value.trim()}
+    applySource();saveCfg();
+    if(syOnNew){const c=syCfg();Object.assign(c,{on:true,repo:S.sync.repo,token:syTokV,tech:($('#suTech').value||'').trim()||c.tech});store.set('mxm_sync',c)}
+    out.innerHTML=`<span style="color:var(--green)">✔ Added ${picks.length} connection${picks.length===1?'':'s'}${syOnNew?' and turned on case sync':''}. Opening…</span>`;
+    setTimeout(()=>{store.del('avio_ac');location.reload()},700)};
+}
+// Settings: make a setup link from this device's connections (repo names and web addresses only)
+function setupLinkFor(){const fc=store.get('avio_fleetcache',{});
+  const src=cfg.sources.filter(x=>x.mode==='github'||x.mode==='url').map(x=>({name:(fc[x.id]||[]).filter(t=>!t.gone&&!t.pending).map(t=>t.name).filter(Boolean).join(', ')||srcLabel(x),mode:x.mode,...(x.mode==='github'?{repo:x.repo,branch:x.branch||'main',path:x.path||''}:{url:x.url})}));
+  const c=syCfg();const j={v:1,sources:src,...(c.repo?{sync:{repo:c.repo}}:{})};
+  return location.origin+location.pathname+'#setup='+b64u.enc(JSON.stringify(j))}
+function openShareSetup(){const u=setupLinkFor();
+  showModal('SETUP LINK',`<div class="kv">Send this link to set up Avio.AI on another device or for another technician. It lists this device's data connections${syCfg().repo?' and the case history repo':''}; whoever opens it ticks the ones they want and pastes their own tokens. No token or key is in the link.</div>
+    <div class="field" style="margin-top:10px"><textarea id="shLink" rows="4" readonly style="font-size:12px">${esc(u)}</textarea></div>
+    <div class="grid2"><button class="btn2" id="shCopy">Copy Link</button>${navigator.share?'<button class="btn2" id="shShare">Share…</button>':''}</div><div id="shOut" class="hint" style="margin-top:8px"></div>`);
+  $('#shCopy').onclick=async()=>{try{await navigator.clipboard.writeText(u);$('#shOut').textContent='Copied.'}catch(e){$('#shLink').select();$('#shOut').textContent='Select the link above and copy it.'}};
+  const sh=$('#shShare');if(sh)sh.onclick=()=>navigator.share({title:'Avio.AI setup',url:u}).catch(()=>{})}
 /* ═════════════════ BOOT ═════════════════ */
 (async function boot(){
   renderFaultChips();renderFollowChips();
+  if(SETUP){openSetup(SETUP);if(!dataConnected())return}
   if(!dataConnected()){setDot('err');renderBadges('Not connected — open Settings');openSettings(null,true);return}
   await loadCore();
   setTimeout(()=>refreshFleetInfo().catch(()=>{}),1500);
