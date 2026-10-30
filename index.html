@@ -389,6 +389,10 @@ mark{background:var(--mark-bg);color:inherit}
 .ptable th{font-family:var(--sans);font-weight:500;color:var(--text-dim)}
 .pwrap{border-radius:12px}
 .svgbox{border-radius:12px}
+.pdfbox{background:#fff;border-radius:12px;overflow:auto;max-height:72dvh;border:1px solid var(--border);-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.pdfpage{position:relative;width:100%;margin:0 auto}.pdfpage canvas{display:block;width:100%;height:auto}
+.pdfpage .hl{position:absolute;background:rgba(255,213,0,.45);mix-blend-mode:multiply;border-radius:2px;pointer-events:none}
+.viewseg{display:inline-flex;border:1px solid var(--border);border-radius:999px;overflow:hidden}.viewseg button{border:none;background:none;padding:6px 12px;font:inherit;font-size:13px;color:var(--muted);cursor:pointer}.viewseg button.on{background:var(--tonal);color:var(--on-tonal);font-weight:600}
 .progress{background:var(--panel2);border-radius:4px}.progress div{background:var(--cyan)}
 
 /* Recent cases as a Drive file list */
@@ -2154,6 +2158,39 @@ function hlPageText(text,hl){
   for(const t of terms)h=h.replace(new RegExp('(^|[^A-Za-z0-9])('+escRx(esc(t))+')(?![A-Za-z0-9])','g'),'$1<mark>$2</mark>');
   return h;
 }
+// ───────── source PDFs: profile.pdf = {branch, repo?, path?, manuals:[…]} — the manual's own PDF (catalog "path") shown at the cited page
+const PDF_CACHE='avio-pdf-v1',PDF_VIEW_KEY='avio_pageview';
+function pdfSrc(d){const P=PROFILE&&PROFILE.pdf;if(!P||!d||!d.path)return null;if(Array.isArray(P.manuals)&&P.manuals.length&&!P.manuals.includes(d.m))return null;
+  const x=activeSrc();if(!x||x.mode!=='github'||!x.token)return null;
+  return {repo:P.repo||x.repo,branch:P.branch||x.branch||'main',path:slashDir(P.path||'')+d.path,token:x.token}}
+let PDFJS_P=null;
+function pdfjs(){return PDFJS_P||(PDFJS_P=new Promise((ok,no)=>{if(window.pdfjsLib){window.pdfjsLib.GlobalWorkerOptions.workerSrc='vendor/pdf.worker.min.js';return ok(window.pdfjsLib)}
+  const sc=document.createElement('script');sc.src='vendor/pdf.min.js';sc.onload=()=>{const L=window.pdfjsLib;L.GlobalWorkerOptions.workerSrc='vendor/pdf.worker.min.js';ok(L)};sc.onerror=()=>{PDFJS_P=null;no(new Error('The PDF viewer could not load.'))};document.head.appendChild(sc)}))}
+async function pdfBytes(s){
+  const key=`https://pdf.local/${s.repo}/${s.branch}/${s.path}`;let c=null;
+  try{c=await caches.open(PDF_CACHE);const hit=await c.match(key);if(hit)return new Uint8Array(await hit.arrayBuffer())}catch(e){}
+  const u=`https://api.github.com/repos/${s.repo}/contents/${s.path.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(s.branch)}`;
+  const r=await fetch(u,{headers:{Authorization:`Bearer ${s.token}`,Accept:'application/vnd.github.raw','X-GitHub-Api-Version':'2022-11-28'}});
+  if(!r.ok)throw new Error(r.status===404?'This PDF is not in the data set yet.':r.status===401||r.status===403?'The GitHub token has no access to the PDFs.':'PDF download failed ('+r.status+').');
+  const b=new Uint8Array(await r.arrayBuffer());try{if(c)await c.put(key,new Response(b.slice(),{headers:{'content-type':'application/pdf'}}))}catch(e){}
+  return b}
+const PDF_DOCS=new Map();
+async function pdfDoc(s){const k=s.repo+'@'+s.branch+'/'+s.path;if(PDF_DOCS.has(k))return PDF_DOCS.get(k);
+  const p=(async()=>{const L=await pdfjs();const data=await pdfBytes(s);return {doc:await L.getDocument({data:data.slice(),isEvalSupported:false}).promise,data}})();
+  PDF_DOCS.set(k,p);p.catch(()=>PDF_DOCS.delete(k));if(PDF_DOCS.size>4)PDF_DOCS.delete(PDF_DOCS.keys().next().value);return p}
+async function renderPdfPage(box,s,page,terms){
+  const {doc}=await pdfDoc(s);const n=Math.min(Math.max(1,page),doc.numPages);const pg=await doc.getPage(n);
+  const base=pg.getViewport({scale:1}),want=Math.min(4000,Math.max(1600,(box.clientWidth||600)*(window.devicePixelRatio||1)*2));
+  const vp=pg.getViewport({scale:want/base.width});
+  const wrap=document.createElement('div');wrap.className='pdfpage';const cv=document.createElement('canvas');cv.width=Math.floor(vp.width);cv.height=Math.floor(vp.height);wrap.appendChild(cv);
+  await pg.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise;
+  box.innerHTML='';box.appendChild(wrap);
+  let hits=0;const T=(terms||[]).map(t=>String(t.t||t).toLowerCase()).filter(t=>t.length>=2);
+  if(T.length){const L=window.pdfjsLib,tc=await pg.getTextContent();
+    for(const it of tc.items){const str=String(it.str||''),low=str.toLowerCase();if(!str.trim())continue;
+      for(const t of T){let i=low.indexOf(t);while(i>=0){const m=L.Util.transform(vp.transform,it.transform),fh=Math.hypot(m[2],m[3]),w=(it.width||0)*vp.scale,x0=m[4]+w*(i/str.length),ww=Math.max(4,w*(t.length/str.length));
+        const h=document.createElement('div');h.className='hl';h.style.left=(x0/vp.width*100)+'%';h.style.top=((m[5]-fh*1.05)/vp.height*100)+'%';h.style.width=(ww/vp.width*100)+'%';h.style.height=(fh*1.25/vp.height*100)+'%';wrap.appendChild(h);hits++;i=low.indexOf(t,i+t.length)}}}}
+  return {hits,numPages:doc.numPages,page:n,wrap}}
 async function openPage(docId,page,opt={}){
   if(DATA.catalog[docId]&&DATA.catalog[docId].wset&&!WSET)return showModal('Wiring','<div class="errbox">This drawing belongs to another serial range. Enter the aircraft serial number to open it.</div>');
   if(opt.back&&!opt.noPush&&window._curPage)NAV.push(window._curPage);
@@ -2251,10 +2288,27 @@ async function openPage(docId,page,opt={}){
     }).catch(e=>{box.innerHTML=`<div class="errbox">${esc(e.message)}</div>`});
   } else {
     const local=PROFILE.localRoot?`${PROFILE.localRoot}${String(d.path||'').replace(/\//g,'\\')}`:String(d.path||'');
-    showModal(pg.cite,`<div class="kv"><b>${esc(d.m)} — ${esc(d.title)}</b><br>${esc(d.type||'')} · ATA ${esc(d.ata||'—')} · page ${page} of ${d.pages}${d.rev?' · '+esc(dmyStr(d.rev)):''}${local?`<br>PDF: <span style="font-family:var(--mono);font-size:12px">${esc(local)}</span> (page ${page})`:''}</div>
-     ${nav}</div>${(opt.hl||[]).length?'<div class="hlnote" id="hlNote"></div>':''}<div class="pagetext">${hlPageText(pg.text,opt.hl)}</div>`);
-    {const ms=$$('#modalBody .pagetext mark');const n=$('#hlNote');if(n){const want=[...new Set((opt.hl||[]).map(x=>x.t))].join(', ');n.innerHTML=ms.length?`Highlighted: <b>${esc(want)}</b> · ${ms.length} place${ms.length>1?'s':''}`:`<b>${esc(want)}</b> isn't on this page. Try Prev / Next.`}
-      if(ms[0])requestAnimationFrame(()=>ms[0].scrollIntoView({block:'center'}))}
+    const ps=pdfSrc(d);let view=ps?(store.get(PDF_VIEW_KEY,'pdf')==='text'?'text':'pdf'):'text';
+    const seg=ps?`<span class="viewseg"><button type="button" data-v="pdf" class="${view==='pdf'?'on':''}">PDF</button><button type="button" data-v="text" class="${view==='text'?'on':''}">Text</button></span>`:'';
+    showModal(pg.cite,`<div class="kv"><b>${esc(d.m)} — ${esc(d.title)}</b><br>${esc(d.type||'')} · ATA ${esc(d.ata||'—')} · page ${page} of ${d.pages}${d.rev?' · '+esc(dmyStr(d.rev)):''}${local&&!ps?`<br>PDF: <span style="font-family:var(--mono);font-size:12px">${esc(local)}</span> (page ${page})`:''}</div>
+     ${nav}${seg}</div>${(opt.hl||[]).length?'<div class="hlnote" id="hlNote"></div>':''}<div id="pgView"></div>`);
+    const want=[...new Set((opt.hl||[]).map(x=>x.t))].join(', ');
+    const showText=()=>{const v=$('#pgView');if(!v)return;v.innerHTML=`<div class="pagetext">${hlPageText(pg.text,opt.hl)}</div>`;
+      const ms=$$('#modalBody .pagetext mark');const n=$('#hlNote');if(n)n.innerHTML=ms.length?`Highlighted: <b>${esc(want)}</b> · ${ms.length} place${ms.length>1?'s':''}`:`<b>${esc(want)}</b> isn't on this page. Try Prev / Next.`;
+      if(ms[0])requestAnimationFrame(()=>ms[0].scrollIntoView({block:'center'}))};
+    const showPdf=async()=>{const v=$('#pgView');if(!v)return;
+      v.innerHTML=`<div class="zbar" style="margin-top:0"><button class="btn2 small" id="pzOut" type="button">−</button><button class="btn2 small" id="pzIn" type="button">＋</button><button class="btn2 small" id="pzFit" type="button">Fit</button><button class="btn2 small" id="pzOpen" type="button"><span class="ms" style="font-size:18px;vertical-align:-4px">open_in_new</span> Open PDF</button></div>
+        <div class="pdfbox" id="pdfBox"><div class="hint" style="padding:14px;color:#333">Loading the PDF…</div></div>
+        <details class="more" style="margin-top:10px"><summary>▸ Page Text</summary><div class="pagetext">${hlPageText(pg.text,opt.hl)}</div></details>`;
+      const box=$('#pdfBox');let z=1;const setZ=nz=>{z=Math.min(6,Math.max(1,nz));const w=box.querySelector('.pdfpage');if(w)w.style.width=(z*100)+'%'};
+      $('#pzIn').onclick=()=>setZ(z*1.5);$('#pzOut').onclick=()=>setZ(z/1.5);$('#pzFit').onclick=()=>setZ(1);
+      $('#pzOpen').onclick=async()=>{try{const {data}=await pdfDoc(ps);window.open(URL.createObjectURL(new Blob([data],{type:'application/pdf'}))+'#page='+page,'_blank')}catch(e){}};
+      try{const r=await renderPdfPage(box,ps,page,opt.hl);if(!document.body.contains(box))return;
+        const n=$('#hlNote');if(n)n.innerHTML=r.hits?`Highlighted: <b>${esc(want)}</b> · ${r.hits} place${r.hits>1?'s':''}`:`<b>${esc(want)}</b> isn't marked on this page. Try Text, or Prev / Next.`;
+        const h=r.wrap.querySelector('.hl');if(h){setZ(1.8);requestAnimationFrame(()=>{const br=box.getBoundingClientRect(),hr=h.getBoundingClientRect();box.scrollTop+=hr.top-br.top-box.clientHeight/3;box.scrollLeft+=hr.left-br.left-box.clientWidth/4})}}
+      catch(e){if(!document.body.contains(box))return;box.innerHTML=`<div class="errbox" style="margin:10px">${esc(e.message||e)} Showing the page text instead.</div><div class="pagetext">${hlPageText(pg.text,opt.hl)}</div>`}};
+    $$('#modalBody .viewseg button').forEach(b=>b.onclick=()=>{view=b.dataset.v;store.set(PDF_VIEW_KEY,view);$$('#modalBody .viewseg button').forEach(x=>x.classList.toggle('on',x===b));view==='pdf'?showPdf():showText()});
+    view==='pdf'?showPdf():showText();
   }
   $('#pgPrev').onclick=()=>openPage(docId,page-1,{...opt,noPush:true});$('#pgNext').onclick=()=>openPage(docId,page+1,{...opt,noPush:true});
   const pb=$('#pgBack');if(pb)pb.onclick=()=>{const p=NAV.pop();if(p)openPage(p.docId,p.page,{...p.opt,noPush:true,back:false,keep:true})};
