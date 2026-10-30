@@ -2330,17 +2330,29 @@ async function openPage(docId,page,opt={}){
     showModal(pg.cite,`<div class="kv"><b>${esc(d.m)} — ${esc(d.title)}</b><br>${esc(d.type||'')} · ATA ${esc(d.ata||'—')} · page ${page} of ${d.pages}${d.rev?' · '+esc(dmyStr(d.rev)):''}${local&&!ps?`<br>PDF: <span style="font-family:var(--mono);font-size:12px">${esc(local)}</span> (page ${page})`:''}</div>
      ${nav}${seg}</div>${(opt.hl||[]).length?'<div class="hlnote" id="hlNote"></div>':''}<div id="pgView"></div>`);
     const want=[...new Set((opt.hl||[]).map(x=>x.t))].join(', ');
-    const showText=()=>{const v=$('#pgView');if(!v)return;v.innerHTML=`<div class="pagetext">${hlPageText(pg.text,opt.hl)}</div>`;
+    const navBtns=pdf=>{const t=pdf&&matchMedia('(pointer:coarse)').matches;['#pgPrev','#pgNext'].forEach(q=>{const b=$(q);if(b)b.classList.toggle('hidden',t)})};
+    const showText=()=>{const v=$('#pgView');if(!v)return;navBtns(false);v.innerHTML=`<div class="pagetext">${hlPageText(pg.text,opt.hl)}</div>`;
       const ms=$$('#modalBody .pagetext mark');const n=$('#hlNote');if(n)n.innerHTML=ms.length?`Highlighted: <b>${esc(want)}</b> · ${ms.length} place${ms.length>1?'s':''}`:`<b>${esc(want)}</b> isn't on this page. Try Prev / Next.`;
       if(ms[0])requestAnimationFrame(()=>ms[0].scrollIntoView({block:'center'}))};
-    const showPdf=async()=>{const v=$('#pgView');if(!v)return;
-      v.innerHTML=`<div class="zbar" style="margin-top:0"><button class="btn2 small" id="pzOut" type="button">−</button><button class="btn2 small" id="pzIn" type="button">＋</button><button class="btn2 small" id="pzFit" type="button">Fit</button><button class="btn2 small" id="pzOpen" type="button"><span class="ms" style="font-size:18px;vertical-align:-4px">open_in_new</span> Open PDF</button><span class="zhint">Pinch or double-tap to zoom · drag to move</span></div>
+    const showPdf=async()=>{const v=$('#pgView');if(!v)return;navBtns(true);
+      v.innerHTML=`<div class="zbar" style="margin-top:0"><button class="btn2 small" id="pzOut" type="button">−</button><button class="btn2 small" id="pzIn" type="button">＋</button><button class="btn2 small" id="pzFit" type="button">Fit</button><button class="btn2 small" id="pzOpen" type="button"><span class="ms" style="font-size:18px;vertical-align:-4px">open_in_new</span> Open PDF</button><span class="zhint">${matchMedia('(pointer:coarse)').matches?'Swipe to turn the page · pinch or double-tap to zoom':'Pinch or double-tap to zoom · drag to move'}</span></div>
         <div class="svgbox pdfbox" id="pdfBox"><div class="hint" style="padding:14px;color:#333">Loading the PDF…</div></div>
         <details class="more" style="margin-top:10px"><summary>▸ Page Text</summary><div class="pagetext">${hlPageText(pg.text,opt.hl)}</div></details>`;
       const box=$('#pdfBox');let ZP=null;const setZ=(nz,keep)=>{if(ZP)ZP.setZ(nz,keep)};const curZ=()=>ZP?ZP.z:1;
       $('#pzIn').onclick=()=>setZ(curZ()*1.6);$('#pzOut').onclick=()=>setZ(curZ()/1.6);$('#pzFit').onclick=()=>setZ(1);
       $('#pzOpen').onclick=async()=>{try{const {data}=await pdfDoc(ps);window.open(URL.createObjectURL(new Blob([data],{type:'application/pdf'}))+'#page='+page,'_blank')}catch(e){}};
       try{const r=await renderPdfPage(box,ps,page,opt.hl);if(!document.body.contains(box))return;ZP=attachZoomPan(box,r.wrap,5);
+        // swipe left / right turns the page (when the page fits, or is scrolled to that edge)
+        {let sw=null;const last=Math.min(d.pages||r.numPages,r.numPages);
+          box.addEventListener('touchstart',e=>{if(e.touches.length!==1){sw=null;return}const mx=box.scrollWidth-box.clientWidth;
+            sw={x:e.touches[0].clientX,y:e.touches[0].clientY,t:Date.now(),l:box.scrollLeft<=2,r:box.scrollLeft>=mx-2}},{passive:true});
+          box.addEventListener('touchmove',e=>{if(e.touches.length>1)sw=null},{passive:true});
+          box.addEventListener('touchend',e=>{if(!sw||e.touches.length)return;const t=e.changedTouches[0],dx=t.clientX-sw.x,dy=t.clientY-sw.y,s0=sw;sw=null;
+            if(Math.abs(dx)<60||Math.abs(dy)>Math.abs(dx)*0.6||Date.now()-s0.t>700)return;
+            const np=page+(dx<0?1:-1);if(dx<0?!s0.r:!s0.l)return;
+            const w=r.wrap;w.style.transition='transform .18s ease-out,opacity .18s';
+            if(np<1||np>last){w.style.transform=`translateX(${dx<0?-6:6}%)`;setTimeout(()=>{w.style.transform=''},180);return}
+            w.style.transform=`translateX(${dx<0?-35:35}%)`;w.style.opacity='.15';setTimeout(()=>openPage(docId,np,{...opt,noPush:true}),170)})}
         const n=$('#hlNote');if(n)n.innerHTML=r.hits?`Highlighted: <b>${esc(want)}</b> · ${r.hits} place${r.hits>1?'s':''}`:`<b>${esc(want)}</b> isn't marked on this page. Try Text, or Prev / Next.`;
         const h=r.wrap.querySelector('.hl');if(h){setZ(1.8,false);requestAnimationFrame(()=>{const br=box.getBoundingClientRect(),hr=h.getBoundingClientRect();box.scrollTop+=hr.top-br.top-box.clientHeight/3;box.scrollLeft+=hr.left-br.left-box.clientWidth/4})}}
       catch(e){if(!document.body.contains(box))return;box.innerHTML=`<div class="errbox" style="margin:10px">${esc(e.message||e)} Showing the page text instead.</div><div class="pagetext">${hlPageText(pg.text,opt.hl)}</div>`}};
