@@ -2178,13 +2178,13 @@ const PDF_DOCS=new Map();
 async function pdfDoc(s){const k=s.repo+'@'+s.branch+'/'+s.path;if(PDF_DOCS.has(k))return PDF_DOCS.get(k);
   const p=(async()=>{const L=await pdfjs();const data=await pdfBytes(s);return {doc:await L.getDocument({data:data.slice(),isEvalSupported:false}).promise,data}})();
   PDF_DOCS.set(k,p);p.catch(()=>PDF_DOCS.delete(k));if(PDF_DOCS.size>4)PDF_DOCS.delete(PDF_DOCS.keys().next().value);return p}
-async function renderPdfPage(box,s,page,terms){
+async function renderPdfPage(box,s,page,terms,o={}){
   const {doc}=await pdfDoc(s);const n=Math.min(Math.max(1,page),doc.numPages);const pg=await doc.getPage(n);
   const base=pg.getViewport({scale:1}),maxW=Math.sqrt(15e6*base.width/base.height),want=Math.min(maxW,Math.max(1600,(box.clientWidth||600)*(window.devicePixelRatio||1)*4));   // sharp to about 4× zoom; under iOS's canvas size limit
   const vp=pg.getViewport({scale:want/base.width});
   const wrap=document.createElement('div');wrap.className='pdfpage';const cv=document.createElement('canvas');cv.width=Math.floor(vp.width);cv.height=Math.floor(vp.height);wrap.appendChild(cv);
   await pg.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise;
-  box.innerHTML='';box.appendChild(wrap);
+  if(o.insert!==false){box.innerHTML='';box.appendChild(wrap)}
   let hits=0;const T=(terms||[]).map(t=>String(t.t||t).toLowerCase()).filter(t=>t.length>=2);
   if(T.length){const L=window.pdfjsLib,tc=await pg.getTextContent();
     for(const it of tc.items){const str=String(it.str||''),low=str.toLowerCase();if(!str.trim())continue;
@@ -2193,7 +2193,7 @@ async function renderPdfPage(box,s,page,terms){
   return {hits,numPages:doc.numPages,page:n,wrap}}
 // pinch / double-tap / drag / Ctrl+wheel zoom on a box whose child `node` is sized by width % (same feel as the wiring viewer)
 function attachZoomPan(box,node,ZMAX=12){
-  const st={z:1};
+  const st={z:1};const setNode=n=>{node=n;st.z=1;node.style.width='100%';box.scrollLeft=0;box.scrollTop=0};
   const setZ=(v,keep)=>{const cx=(box.scrollLeft+box.clientWidth/2)/Math.max(1,box.scrollWidth),cy=(box.scrollTop+box.clientHeight/2)/Math.max(1,box.scrollHeight);
     st.z=Math.min(ZMAX,Math.max(1,v));node.style.width=(st.z*100)+'%';
     if(keep!==false){box.scrollLeft=cx*box.scrollWidth-box.clientWidth/2;box.scrollTop=cy*box.scrollHeight-box.clientHeight/2}};
@@ -2216,7 +2216,7 @@ function attachZoomPan(box,node,ZMAX=12){
   box.addEventListener('touchmove',e=>{if(tap&&e.touches.length===1&&Math.hypot(e.touches[0].clientX-tap.x,e.touches[0].clientY-tap.y)>10)tap.moved=true;if(e.touches.length>1)tap=null},{passive:true});
   box.addEventListener('touchend',e=>{if(!tap||tap.moved||e.touches.length||Date.now()-tap.t>300){tap=null;return}const now=Date.now();
     if(lastTap&&now-lastTap.t<320&&Math.hypot(tap.x-lastTap.x,tap.y-lastTap.y)<35){e.preventDefault();lastTap=null;zoomAt(tap.x,tap.y)}else lastTap={x:tap.x,y:tap.y,t:now};tap=null},{passive:false});
-  node.addEventListener('dblclick',e=>{e.preventDefault();zoomAt(e.clientX,e.clientY)});
+  box.addEventListener('dblclick',e=>{e.preventDefault();zoomAt(e.clientX,e.clientY)});
   {let drag=null;
     box.addEventListener('pointerdown',e=>{if(e.pointerType!=='mouse'||e.button!==0)return;drag={id:e.pointerId,x:e.clientX,y:e.clientY,sl:box.scrollLeft,st:box.scrollTop,moved:false}});
     box.addEventListener('pointermove',e=>{if(!drag||e.pointerId!==drag.id)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
@@ -2227,7 +2227,7 @@ function attachZoomPan(box,node,ZMAX=12){
     box.addEventListener('wheel',e=>{if(!e.ctrlKey&&!e.metaKey)return;e.preventDefault();const br=box.getBoundingClientRect(),cx=e.clientX-br.left,cy=e.clientY-br.top;
       const ox=box.scrollLeft+cx,oy=box.scrollTop+cy;const nz=Math.min(ZMAX,Math.max(1,st.z*Math.exp(-e.deltaY*(e.deltaMode?0.05:0.0025)))),f=nz/st.z;if(f===1)return;st.z=nz;node.style.width=(st.z*100)+'%';
       box.scrollLeft=ox*f-cx;box.scrollTop=oy*f-cy},{passive:false})}
-  return {setZ,get z(){return st.z}}}
+  return {setZ,setNode,get z(){return st.z}}}
 async function openPage(docId,page,opt={}){
   if(DATA.catalog[docId]&&DATA.catalog[docId].wset&&!WSET)return showModal('Wiring','<div class="errbox">This drawing belongs to another serial range. Enter the aircraft serial number to open it.</div>');
   if(opt.back&&!opt.noPush&&window._curPage)NAV.push(window._curPage);
@@ -2327,41 +2327,58 @@ async function openPage(docId,page,opt={}){
     const local=PROFILE.localRoot?`${PROFILE.localRoot}${String(d.path||'').replace(/\//g,'\\')}`:String(d.path||'');
     const ps=pdfSrc(d);let view=ps?(store.get(PDF_VIEW_KEY,'pdf')==='text'?'text':'pdf'):'text';
     const seg=ps?`<span class="viewseg"><button type="button" data-v="pdf" class="${view==='pdf'?'on':''}">PDF</button><button type="button" data-v="text" class="${view==='text'?'on':''}">Text</button></span>`:'';
-    showModal(pg.cite,`<div class="kv"><b>${esc(d.m)} — ${esc(d.title)}</b><br>${esc(d.type||'')} · ATA ${esc(d.ata||'—')} · page ${page} of ${d.pages}${d.rev?' · '+esc(dmyStr(d.rev)):''}${local&&!ps?`<br>PDF: <span style="font-family:var(--mono);font-size:12px">${esc(local)}</span> (page ${page})`:''}</div>
+    showModal(pg.cite,`<div class="kv"><b>${esc(d.m)} — ${esc(d.title)}</b><br>${esc(d.type||'')} · ATA ${esc(d.ata||'—')} · page <span id="pgNum">${page}</span> of ${d.pages}${d.rev?' · '+esc(dmyStr(d.rev)):''}${local&&!ps?`<br>PDF: <span style="font-family:var(--mono);font-size:12px">${esc(local)}</span> (page ${page})`:''}</div>
      ${nav}${seg}</div>${(opt.hl||[]).length?'<div class="hlnote" id="hlNote"></div>':''}<div id="pgView"></div>`);
     const want=[...new Set((opt.hl||[]).map(x=>x.t))].join(', ');
     const navBtns=pdf=>{const t=pdf&&matchMedia('(pointer:coarse)').matches;['#pgPrev','#pgNext'].forEach(q=>{const b=$(q);if(b)b.classList.toggle('hidden',t)})};
-    const showText=()=>{const v=$('#pgView');if(!v)return;navBtns(false);v.innerHTML=`<div class="pagetext">${hlPageText(pg.text,opt.hl)}</div>`;
-      const ms=$$('#modalBody .pagetext mark');const n=$('#hlNote');if(n)n.innerHTML=ms.length?`Highlighted: <b>${esc(want)}</b> · ${ms.length} place${ms.length>1?'s':''}`:`<b>${esc(want)}</b> isn't on this page. Try Prev / Next.`;
+    let cur=page,curPg=pg,turn=null;   // the page shown; PDF page turns happen in place (no modal rebuild)
+    const marks=()=>{const ms=$$('#pgView .pagetext mark');return ms};
+    const setNav=()=>{const pv=$('#pgPrev'),nx=$('#pgNext');if(pv)pv.disabled=cur<=1;if(nx)nx.disabled=cur>=d.pages;const pn=$('#pgNum');if(pn)pn.textContent=cur;$('#modalTitle').textContent=curPg.cite;
+      window._curPage={docId,page:cur,opt:{hl:opt.hl}}};
+    const go=np=>{if(np<1||np>d.pages)return;if(turn&&view==='pdf')turn(np,np>cur?1:-1);else openPage(docId,np,{...opt,noPush:true})};
+    $('#pgPrev').onclick=()=>go(cur-1);$('#pgNext').onclick=()=>go(cur+1);
+    $('#pgCopy').onclick=()=>{navigator.clipboard?.writeText(`${curPg.cite}\n${curPg.text}`);$('#pgCopy').textContent='Copied'};
+    const showText=()=>{const v=$('#pgView');if(!v)return;navBtns(false);v.innerHTML=`<div class="pagetext">${hlPageText(curPg.text,opt.hl)}</div>`;
+      const ms=marks();const n=$('#hlNote');if(n)n.innerHTML=ms.length?`Highlighted: <b>${esc(want)}</b> · ${ms.length} place${ms.length>1?'s':''}`:`<b>${esc(want)}</b> isn't on this page. Try Prev / Next.`;
       if(ms[0])requestAnimationFrame(()=>ms[0].scrollIntoView({block:'center'}))};
-    const showPdf=async()=>{const v=$('#pgView');if(!v)return;navBtns(true);
+    const showPdf=async()=>{const v=$('#pgView');if(!v)return;navBtns(true);turn=null;
       v.innerHTML=`<div class="zbar" style="margin-top:0"><button class="btn2 small" id="pzOut" type="button">−</button><button class="btn2 small" id="pzIn" type="button">＋</button><button class="btn2 small" id="pzFit" type="button">Fit</button><button class="btn2 small" id="pzOpen" type="button"><span class="ms" style="font-size:18px;vertical-align:-4px">open_in_new</span> Open PDF</button><span class="zhint">${matchMedia('(pointer:coarse)').matches?'Swipe to turn the page · pinch or double-tap to zoom':'Pinch or double-tap to zoom · drag to move'}</span></div>
         <div class="svgbox pdfbox" id="pdfBox"><div class="hint" style="padding:14px;color:#333">Loading the PDF…</div></div>
-        <details class="more" style="margin-top:10px"><summary>▸ Page Text</summary><div class="pagetext">${hlPageText(pg.text,opt.hl)}</div></details>`;
-      const box=$('#pdfBox');let ZP=null;const setZ=(nz,keep)=>{if(ZP)ZP.setZ(nz,keep)};const curZ=()=>ZP?ZP.z:1;
+        <details class="more" style="margin-top:10px"><summary>▸ Page Text</summary><div class="pagetext" id="pdfText">${hlPageText(curPg.text,opt.hl)}</div></details>`;
+      const box=$('#pdfBox');let ZP=null,wrap=null,busy=false,last=d.pages;const setZ=(nz,keep)=>{if(ZP)ZP.setZ(nz,keep)};const curZ=()=>ZP?ZP.z:1;
       $('#pzIn').onclick=()=>setZ(curZ()*1.6);$('#pzOut').onclick=()=>setZ(curZ()/1.6);$('#pzFit').onclick=()=>setZ(1);
-      $('#pzOpen').onclick=async()=>{try{const {data}=await pdfDoc(ps);window.open(URL.createObjectURL(new Blob([data],{type:'application/pdf'}))+'#page='+page,'_blank')}catch(e){}};
-      try{const r=await renderPdfPage(box,ps,page,opt.hl);if(!document.body.contains(box))return;ZP=attachZoomPan(box,r.wrap,5);
-        // swipe left / right turns the page (when the page fits, or is scrolled to that edge)
-        {let sw=null;const last=Math.min(d.pages||r.numPages,r.numPages);
-          box.addEventListener('touchstart',e=>{if(e.touches.length!==1){sw=null;return}const mx=box.scrollWidth-box.clientWidth;
-            sw={x:e.touches[0].clientX,y:e.touches[0].clientY,t:Date.now(),l:box.scrollLeft<=2,r:box.scrollLeft>=mx-2}},{passive:true});
-          box.addEventListener('touchmove',e=>{if(e.touches.length>1)sw=null},{passive:true});
-          box.addEventListener('touchend',e=>{if(!sw||e.touches.length)return;const t=e.changedTouches[0],dx=t.clientX-sw.x,dy=t.clientY-sw.y,s0=sw;sw=null;
-            if(Math.abs(dx)<60||Math.abs(dy)>Math.abs(dx)*0.6||Date.now()-s0.t>700)return;
-            const np=page+(dx<0?1:-1);if(dx<0?!s0.r:!s0.l)return;
-            const w=r.wrap;w.style.transition='transform .18s ease-out,opacity .18s';
-            if(np<1||np>last){w.style.transform=`translateX(${dx<0?-6:6}%)`;setTimeout(()=>{w.style.transform=''},180);return}
-            w.style.transform=`translateX(${dx<0?-35:35}%)`;w.style.opacity='.15';setTimeout(()=>openPage(docId,np,{...opt,noPush:true}),170)})}
-        const n=$('#hlNote');if(n)n.innerHTML=r.hits?`Highlighted: <b>${esc(want)}</b> · ${r.hits} place${r.hits>1?'s':''}`:`<b>${esc(want)}</b> isn't marked on this page. Try Text, or Prev / Next.`;
-        const h=r.wrap.querySelector('.hl');if(h){setZ(1.8,false);requestAnimationFrame(()=>{const br=box.getBoundingClientRect(),hr=h.getBoundingClientRect();box.scrollTop+=hr.top-br.top-box.clientHeight/3;box.scrollLeft+=hr.left-br.left-box.clientWidth/4})}}
-      catch(e){if(!document.body.contains(box))return;box.innerHTML=`<div class="errbox" style="margin:10px">${esc(e.message||e)} Showing the page text instead.</div><div class="pagetext">${hlPageText(pg.text,opt.hl)}</div>`}};
+      $('#pzOpen').onclick=async()=>{try{const {data}=await pdfDoc(ps);window.open(URL.createObjectURL(new Blob([data],{type:'application/pdf'}))+'#page='+cur,'_blank')}catch(e){}};
+      const note=r=>{const n=$('#hlNote');if(n)n.innerHTML=r.hits?`Highlighted: <b>${esc(want)}</b> · ${r.hits} place${r.hits>1?'s':''}`:`<b>${esc(want)}</b> isn't marked on this page. Try Text, or another page.`};
+      try{const r=await renderPdfPage(box,ps,cur,opt.hl);if(!document.body.contains(box))return;wrap=r.wrap;last=Math.min(d.pages||r.numPages,r.numPages);ZP=attachZoomPan(box,wrap,5);note(r);setNav();
+        const h=wrap.querySelector('.hl');if(h){setZ(1.8,false);requestAnimationFrame(()=>{const br=box.getBoundingClientRect(),hr=h.getBoundingClientRect();box.scrollTop+=hr.top-br.top-box.clientHeight/3;box.scrollLeft+=hr.left-br.left-box.clientWidth/4})}}
+      catch(e){if(!document.body.contains(box))return;box.innerHTML=`<div class="errbox" style="margin:10px">${esc(e.message||e)} Showing the page text instead.</div><div class="pagetext">${hlPageText(curPg.text,opt.hl)}</div>`;return}
+      // turn the page in place: the old page slides out while the next one renders, the new one slides in; nothing else on screen moves
+      turn=async(np,dir)=>{if(busy||!wrap)return;
+        if(np<1||np>last){wrap.style.transition='transform .18s ease-out';wrap.style.transform=`translateX(${-dir*6}%)`;setTimeout(()=>{if(wrap)wrap.style.transform=''},180);return}
+        busy=true;const old=wrap;box.style.height=box.offsetHeight+'px';
+        old.style.transition='transform .16s ease-in,opacity .16s';old.style.transform=`translateX(${-dir*30}%)`;old.style.opacity='0';
+        try{const [r2,p2]=await Promise.all([renderPdfPage(box,ps,np,opt.hl,{insert:false}),getPage(docId,np),new Promise(ok=>setTimeout(ok,160))]);
+          if(!document.body.contains(box))return;
+          const w=r2.wrap;w.style.transform=`translateX(${dir*30}%)`;w.style.opacity='0';box.replaceChildren(w);ZP.setNode(w);wrap=w;
+          cur=np;if(p2)curPg=p2;setNav();note(r2);const pt=$('#pdfText');if(pt)pt.innerHTML=hlPageText(curPg.text,opt.hl);
+          w.getBoundingClientRect();w.style.transition='transform .18s ease-out,opacity .18s';w.style.transform='';w.style.opacity='1';
+          setTimeout(()=>{w.style.transition='';box.style.height=''},200)}
+        catch(e){old.style.transform='';old.style.opacity='1';box.style.height=''}
+        finally{busy=false}};
+      // swipe left / right turns the page (when the page fits, or is scrolled to that edge)
+      {let sw=null;
+        box.addEventListener('touchstart',e=>{if(e.touches.length!==1){sw=null;return}const mx=box.scrollWidth-box.clientWidth;
+          sw={x:e.touches[0].clientX,y:e.touches[0].clientY,t:Date.now(),l:box.scrollLeft<=2,r:box.scrollLeft>=mx-2}},{passive:true});
+        box.addEventListener('touchmove',e=>{if(e.touches.length>1)sw=null},{passive:true});
+        box.addEventListener('touchend',e=>{if(!sw||e.touches.length)return;const t=e.changedTouches[0],dx=t.clientX-sw.x,dy=t.clientY-sw.y,s0=sw;sw=null;
+          if(Math.abs(dx)<60||Math.abs(dy)>Math.abs(dx)*0.6||Date.now()-s0.t>700)return;if(dx<0?!s0.r:!s0.l)return;
+          const dir=dx<0?1:-1;turn(cur+dir,dir)})}};
     $$('#modalBody .viewseg button').forEach(b=>b.onclick=()=>{view=b.dataset.v;store.set(PDF_VIEW_KEY,view);$$('#modalBody .viewseg button').forEach(x=>x.classList.toggle('on',x===b));view==='pdf'?showPdf():showText()});
     view==='pdf'?showPdf():showText();
   }
-  $('#pgPrev').onclick=()=>openPage(docId,page-1,{...opt,noPush:true});$('#pgNext').onclick=()=>openPage(docId,page+1,{...opt,noPush:true});
+  if(!$('#pgPrev').onclick){$('#pgPrev').onclick=()=>openPage(docId,page-1,{...opt,noPush:true});$('#pgNext').onclick=()=>openPage(docId,page+1,{...opt,noPush:true})}
   const pb=$('#pgBack');if(pb)pb.onclick=()=>{const p=NAV.pop();if(p)openPage(p.docId,p.page,{...p.opt,noPush:true,back:false,keep:true})};
-  $('#pgCopy').onclick=()=>{navigator.clipboard?.writeText(`${pg.cite}\n${pg.text}`);$('#pgCopy').textContent='Copied'};
+  if(!$('#pgCopy').onclick)$('#pgCopy').onclick=()=>{navigator.clipboard?.writeText(`${pg.cite}\n${pg.text}`);$('#pgCopy').textContent='Copied'};
 }
 document.addEventListener('click',async e=>{
   const c=e.target.closest('.cite');if(!c)return;
