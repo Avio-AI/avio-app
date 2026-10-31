@@ -1352,9 +1352,9 @@ async function runTool(name,input){
       await loadMel();const ops=melOps();const disc=new Date();
       const r=searchMel(input.query||'',6);
       const out=r.map(g=>({mel_id:melId(g),item:melTitle(g),reference:melRef(g),optional_item:g.opt||undefined,color:g.color||undefined,
-        mmel_cite:g.mmel?melCiteStr('mmel',g.mmel):undefined,
+        mmel_cite:g.mmel?melCiteStr('mmel',g.mmel,g):undefined,
         relief:g.rel.map((x,oi)=>[x,oi]).filter(([x])=>melAuthOk(x,ops)).map(([x,oi])=>{const iv=melInterval(x,ops,disc);return {option:oi,category:x.cat,installed:x.inst,required_for_dispatch:x.req,applies_to:x.qual||x.note||undefined,authority_tag:x.auth||undefined,
-          procedures_differ:x.moppv?`${PROCN()} shows ${x.moppv}; MMEL values given`:undefined,conditions:x.rem||x.lim,maintenance_M:x.m,operational_O:x.o,placard:x.p,repair_interval:iv.line,procedures_cite:(x.mopp||[]).map(p=>melCiteStr('mopp',p)).join(', ')}})}));
+          procedures_differ:x.moppv?`${PROCN()} shows ${x.moppv}; MMEL values given`:undefined,conditions:x.rem||x.lim,maintenance_M:x.m,operational_O:x.o,placard:x.p,repair_interval:iv.line,procedures_cite:(x.mopp||[]).map(p=>melCiteStr('mopp',p,g)).join(', ')}})}));
       return {summary:`${r.length} MEL item${r.length===1?'':'s'}`,data:{operating_rule:ops.label,dispatch_authority:ops.basis+' '+ops.preamble,
         pic:'PIC determines the aircraft is in condition for safe flight (14 CFR 91.7).',no_mel_note:ops.none?'No MEL authorization: 14 CFR 91.213(d) is not available for a turbine airplane with an MMEL; repair before flight or obtain a special flight permit (14 CFR 21.197).':undefined,
         matches:out,note:r.length?'Dispatch must follow the operator\'s own approved MEL, which may be more restrictive than the MMEL.':'No MMEL relief found for those words. If the item is truly not listed in the MMEL, it must be operative for dispatch.'}};
@@ -1417,7 +1417,7 @@ async function runTool(name,input){
   }catch(e){return {summary:'error',error:true,data:{error:String(e.message||e)}}}
 }
 const PROCN=()=>(MEL&&MEL.mopp&&MEL.mopp.cite)||PROFILE.procCite||'Procedures';
-function melCiteStr(k,pr){const c=`${k==='mopp'?PROCN():k.toUpperCase()} ${pr[1]||'p'+pr[0]}`;registerSource({cite:c,doc_id:MEL[k].doc_id,pdf_page:pr[0]});return c}
+function melCiteStr(k,pr,g){const c=`${k==='mopp'?PROCN():k.toUpperCase()} ${pr[1]||'p'+pr[0]}`;registerSource({cite:c,doc_id:MEL[k].doc_id,pdf_page:pr[0],hl:melHl(g)});return c}
 const SOURCES=new Map();
 function normCite(c){return String(c).toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim()}
 function registerSource(x){if(x&&x.cite&&x.doc_id!=null){SOURCES.set(normCite(x.cite),{doc_id:x.doc_id,pdf_page:x.pdf_page,hl:x.hl});}}
@@ -2185,11 +2185,20 @@ async function renderPdfPage(box,s,page,terms,o={}){
   const wrap=document.createElement('div');wrap.className='pdfpage';const cv=document.createElement('canvas');cv.width=Math.floor(vp.width);cv.height=Math.floor(vp.height);wrap.appendChild(cv);
   await pg.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise;
   if(o.insert!==false){box.innerHTML='';box.appendChild(wrap)}
-  let hits=0;const T=(terms||[]).map(t=>String(t.t||t).toLowerCase()).filter(t=>t.length>=2);
+  let hits=0;const T=(terms||[]).filter(t=>!(t&&t.seq)).map(t=>String(t.t||t).toLowerCase()).filter(t=>t.length>=2),SQ=(terms||[]).filter(t=>t&&t.seq);
+  const mark=(x,y,w,h,wrap)=>{const e=document.createElement('div');e.className='hl';e.style.left=(x/vp.width*100)+'%';e.style.top=(y/vp.height*100)+'%';e.style.width=(w/vp.width*100)+'%';e.style.height=(h/vp.height*100)+'%';wrap.appendChild(e);hits++};
+  if(SQ.length){const L=window.pdfjsLib,items=(await pg.getTextContent()).items.filter(i=>String(i.str||'').trim()).map(i=>{const m=L.Util.transform(vp.transform,i.transform);return {s:String(i.str).trim(),x:m[4],y:m[5],h:Math.hypot(m[2],m[3]),w:(i.width||0)*vp.scale}});
+    // an MEL item: its sequence number ("1.") and, on the same line to its right, the first word of the item title
+    for(const q of SQ){const word=String(q.word||'').toLowerCase(),seq=String(q.seq);
+      for(const a of items){const lo=a.s.toLowerCase();let end=null;
+        if(lo.startsWith(seq+'.')&&lo.slice(seq.length+1).trim().startsWith(word)&&/^\s/.test(a.s.slice(seq.length+1)))end=a;
+        else if(a.s===seq+'.'||a.s===seq){end=items.filter(b=>b!==a&&b.x>a.x&&Math.abs(b.y-a.y)<a.h*0.7&&b.s.toLowerCase().startsWith(word)).sort((b,c)=>b.x-c.x)[0]||null}
+        if(end){mark(a.x-2,a.y-a.h*1.05,end.x+end.w-a.x+4,a.h*1.3,wrap);break}}}}
   if(T.length){const L=window.pdfjsLib,tc=await pg.getTextContent();
     for(const it of tc.items){const str=String(it.str||''),low=str.toLowerCase();if(!str.trim())continue;
-      for(const t of T){let i=low.indexOf(t);while(i>=0){const m=L.Util.transform(vp.transform,it.transform),fh=Math.hypot(m[2],m[3]),w=(it.width||0)*vp.scale,x0=m[4]+w*(i/str.length),ww=Math.max(4,w*(t.length/str.length));
-        const h=document.createElement('div');h.className='hl';h.style.left=(x0/vp.width*100)+'%';h.style.top=((m[5]-fh*1.05)/vp.height*100)+'%';h.style.width=(ww/vp.width*100)+'%';h.style.height=(fh*1.25/vp.height*100)+'%';wrap.appendChild(h);hits++;i=low.indexOf(t,i+t.length)}}}}
+      for(const t of T){let i=low.indexOf(t);while(i>=0){if(/[a-z0-9]/.test(low[i-1]||'')||/[a-z0-9]/.test(low[i+t.length]||'')||(/\d$/.test(t)&&low[i+t.length]==='-'&&/\d/.test(low[i+t.length+1]||''))){i=low.indexOf(t,i+1);continue}   // whole words / codes only: 21-1 is not 21-10
+        const m=L.Util.transform(vp.transform,it.transform),fh=Math.hypot(m[2],m[3]),w=(it.width||0)*vp.scale,x0=m[4]+w*(i/str.length),ww=Math.max(4,w*(t.length/str.length));
+        mark(x0,m[5]-fh*1.05,ww,fh*1.25,wrap);i=low.indexOf(t,i+t.length)}}}}
   return {hits,numPages:doc.numPages,page:n,wrap}}
 // pinch / double-tap / drag / Ctrl+wheel zoom on a box whose child `node` is sized by width % (same feel as the wiring viewer)
 function attachZoomPan(box,node,ZMAX=12){
@@ -3613,8 +3622,9 @@ function melAuthorityHtml(g,ops){
   if(ops.fam==='easa')L.push(`<div class="melrow"><b>Extension:</b> only under a rectification interval extension procedure approved by your competent authority.</div>`);
   return L.join('');
 }
-function melCite(docKey,pr){const doc=MEL[docKey];if(!pr)return '';const lab=Array.isArray(pr)?pr[1]:'';const pg=Array.isArray(pr)?pr[0]:pr;
-  const c=`${docKey.toUpperCase()} ${lab||'p'+pg}`;registerSource({cite:c,doc_id:doc.doc_id,pdf_page:pg});
+const melHl=g=>g&&g.seq&&g.item?[{t:g.item,seq:String(g.seq).replace(/\D.*$/,''),word:String(g.item).split(/[\s(/,]+/)[0]}]:undefined;
+function melCite(docKey,pr,g){const doc=MEL[docKey];if(!pr)return '';const lab=Array.isArray(pr)?pr[1]:'';const pg=Array.isArray(pr)?pr[0]:pr;
+  const c=`${docKey.toUpperCase()} ${lab||'p'+pg}`;registerSource({cite:c,doc_id:doc.doc_id,pdf_page:pg,hl:melHl(g)});
   return `<span class="cite" data-cite="${esc(c)}">${esc(c)}</span>`}
 function melText(t){
   // keep list structure: "a) …", "• …", "NOTE …" on their own lines
@@ -3640,7 +3650,7 @@ function melReliefHtml(g,r,i,ops,disc){
     ${r.m!==undefined?sec('m','(M) Maintenance Procedure','For Maintenance',r.m,pr.M):''}
     ${sec('o','(O) Operational Procedure','For Flight Crew',r.o,pr.O)}
     ${r.p!==undefined?sec('p','Placarding Procedure','For Maintenance',r.p,true):''}
-    <div class="melcites">${melCite('mmel',g.mmel)} ${(r.mopp||[]).map(x=>melCite('mopp',x)).join(' ')}</div>
+    <div class="melcites">${melCite('mmel',g.mmel,g)} ${(r.mopp||[]).map(x=>melCite('mopp',x,g)).join(' ')}</div>
     ${ops.amdl?`<button class="btn small melamdl" data-i="${i}">Create ${esc(formTitle())}</button> `:''}<button class="btn2 small melpdf" data-i="${i}" ${ops.none?'disabled':''}>Create Deferral PDF</button>
   </div>`;
 }
