@@ -1,0 +1,115 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Avio.AI Quick Start Guide</title>
+<style>
+@font-face{font-family:Lato;src:url(../vendor/fonts/Lato-Regular.ttf);font-weight:400}
+@font-face{font-family:Lato;src:url(../vendor/fonts/Lato-Bold.ttf);font-weight:700}
+@page{size:letter;margin:0.6in 0.7in}
+body{font-family:Lato,sans-serif;font-size:11pt;line-height:1.5;color:#1d1d1f}
+h1{font-size:24pt;margin:0 0 4pt;color:#8a4b22}
+.byline{color:#666;margin:0 0 18pt;font-size:10pt}
+h2{font-size:15pt;margin:20pt 0 6pt;color:#8a4b22;border-bottom:1px solid #e3cdbb;padding-bottom:3pt;break-after:avoid}
+p{margin:0 0 8pt}
+ol,ul{margin:0 0 8pt;padding-left:20pt}
+li{margin:0 0 4pt}
+table{border-collapse:collapse;width:100%;margin:6pt 0 10pt;font-size:10pt;break-inside:avoid}
+th,td{border:1px solid #d9c3b0;padding:5pt 7pt;text-align:left;vertical-align:top}
+th{background:#f6ece3}
+code{font-family:Lato,sans-serif;font-weight:700}
+a{color:#8a4b22}
+section{break-inside:auto}
+figure{margin:10pt 0 14pt;text-align:center;break-inside:avoid}
+figure img{max-width:100%;max-height:4.6in}
+figure.strip img{max-height:none;width:68%}
+figure.pdfpic img{width:85%;max-height:none}
+p:has(+ figure){break-after:avoid}
+h2{break-before:auto}
+</style>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+@media screen{body{max-width:760px;margin:0 auto;padding:18px 16px 40px;font-size:16px;background:#fff}
+figure img{max-height:none;height:auto}figure.strip img{width:100%;max-width:560px}figure.pdfpic img{width:100%}
+table{display:block;overflow-x:auto}}
+</style>
+</head><body>
+<h1>Avio.AI Quick Start Guide</h1>
+<p class="byline">4 NOV 2026 · Gabriel</p>
+
+<h2>Avio.AI in 30 Seconds</h2>
+<p>Avio.AI is a pocket maintenance helper. Tell it what the airplane is doing, and it digs through <strong>your company's own manuals</strong> for likely causes, tests, MEL relief and paperwork. It does the reading. You do the thinking, the wrenching and the signing.</p>
+<p><strong>The one rule:</strong> every answer has a citation. Tap it and check it. If the app and the manual disagree, the manual wins. Every time.</p>
+<p>This is the short version. The full <a href="guide.html">Avio.AI User Guide</a> has every button explained, with pictures.</p>
+
+<h2>Five-Minute Setup</h2>
+<ol>
+<li>Open <a href="https://avio-ai.github.io/avio-app/">avio-ai.github.io/avio-app</a> on your phone. On an iPhone, tap Share, then <strong>Add to Home Screen</strong>.</li>
+<li>Tap the <strong>setup link</strong> your administrator sent you. No link? Open <strong>Settings</strong> (the gear), tap <strong>＋ Add a Connection</strong>, enter the data location and access key, then tap <strong>Save &amp; Connect</strong>.</li>
+<li>Paste the <strong>Anthropic API Key</strong> in Settings. That wakes up the AI. Without it, Search, MEL and PFI still work.</li>
+<li>Type your name under <strong>Technician Name</strong>.</li>
+<li>Tap the aircraft name in the top bar and pick your airplane.</li>
+</ol>
+<p>Just looking around? Tap <strong>Try the Demo Aircraft</strong>. It's a made-up jet, so you can't break anything real.</p>
+<p><strong>Keys are like house keys.</strong> Don't text them, email them or tape them to the hangar fridge.</p>
+
+<h2>Find Your Way Around</h2>
+<p>The top bar works on every tab:</p>
+<figure class="strip"><img src="02a-topbar.webp" loading="lazy" alt="Top bar"></figure>
+<p>The four tabs live along the bottom:</p>
+<figure class="strip"><img src="02b-tabs.webp" loading="lazy" alt="Tabs"></figure>
+<table><thead><tr><th>Tab</th><th>Use It To…</th><th>Needs the AI Key?</th></tr></thead><tbody>
+<tr><td><strong>Describe</strong></td><td>Tell the app what's wrong and start a troubleshooting case</td><td>Yes</td></tr>
+<tr><td><strong>MEL</strong></td><td>Check if the airplane can legally fly with something broken, and make the deferral paperwork</td><td>No</td></tr>
+<tr><td><strong>PFI</strong></td><td>Initial a checklist line by line, sign it and save a one-page PDF</td><td>No (except Import)</td></tr>
+<tr><td><strong>Search</strong></td><td>Search the manuals, or flip the switch to <strong>Wiring</strong> for pin-outs and drawings</td><td>No</td></tr>
+</tbody></table>
+
+<h2>Fix a Squawk in Six Steps</h2>
+<ol>
+<li>On <strong>Describe</strong>, enter the tail and serial number under <strong>Aircraft</strong>.</li>
+<li>Type the CAS / CMC message or fault code exactly as shown. Add every message, not just the first.</li>
+<li>Under <strong>What's Happening?</strong>, tell the story: when it started, what you saw, what you tried. Tap <strong>PTT</strong> to talk instead of type.</li>
+<li>Optional but gold: open <strong>Flight Phase &amp; Conditions</strong> (airport, phase, altitude, temps) and tap <strong>Add Photo</strong> for a screen or part label.</li>
+<li>Tap <strong>Fix My Plane ▸</strong>. The AI answers with likely causes, tests to run and the manual pages behind them.</li>
+<li>Reply with what you find ("connector was loose", "28 volts"). When it's fixed, say so. The AI drafts the corrective action and log entry, and the status bar holds the <strong>Case Brief</strong> and <strong>Close Case</strong>.</li>
+</ol>
+<figure><img src="04-describe-top.webp" loading="lazy" alt="Describe tab"></figure>
+<p><strong>Tap every citation.</strong> It opens the manual page so you can see it with your own eyes.</p>
+
+<h2>Defer It: the MEL Tab</h2>
+<ol>
+<li>Pick your company's <strong>operating rule</strong> (Part 91, Part 135 and so on).</li>
+<li>Enter the <strong>Day Of Discovery</strong>. The app works out the repair-by date.</li>
+<li>Search the broken item or CAS message, read each relief option and its <strong>REQUIRED</strong> (M) and (O) steps.</li>
+<li>Tap <strong>Create Deferral PDF</strong>, or your company's discrepancy form.</li>
+</ol>
+<p>Your company's approved MEL always has the final say.</p>
+
+<h2>Check It: the PFI Tab</h2>
+<ol>
+<li>Pick a checklist at the top (<strong>Post-Flight</strong>, <strong>Pre-Flight</strong>, <strong>CBs</strong> and so on).</li>
+<li>Fill in the aircraft box and type <strong>Your Initials</strong> once.</li>
+<li>Tap a line once for your initials, twice for <strong>N/A</strong>, three times to clear. Servicing lines take the reading and what you <strong>Added</strong>.</li>
+<li>Sign with your finger (or <strong>Import Signature</strong>), tap <strong>Export PDF</strong>, then <strong>Save &amp; Start New</strong> (tap twice).</li>
+</ol>
+<p><strong>Circuit breakers:</strong> tap <strong>Pulled</strong> when you pull one and <strong>Reset</strong> when it's back in. Tap Reset twice for <strong>MEL</strong> when an MEL action keeps it pulled. A yellow reminder stays on every tab until every breaker is reset. Pulling one that isn't on the list? Tap <strong>Add CB / SSPC for This Event</strong>.</p>
+<p><strong>Edit</strong> fixes a line on any checklist. <strong>Import</strong> turns your company's own inspection form (PDF) into a checklist, which you check and approve before anyone uses it.</p>
+
+<h2>Golden Rules</h2>
+<ol>
+<li><strong>The manual wins.</strong> Check every citation.</li>
+<li><strong>Your company's MEL wins</strong> over the master MEL shown in the app.</li>
+<li><strong>Enter the serial number.</strong> Wiring changes from one airplane to the next.</li>
+<li><strong>You sign, the app doesn't.</strong> Read every log entry and form first.</li>
+<li><strong>Guard your keys.</strong> Never share them in a text, email or photo.</li>
+</ol>
+
+<h2>Quick Fixes and Help</h2>
+<table><thead><tr><th>Problem</th><th>Quick Fix</th></tr></thead><tbody>
+<tr><td>The AI doesn't answer</td><td>Check the <strong>Anthropic API Key</strong> in Settings and your signal</td></tr>
+<tr><td>"Can't reach this connection"</td><td>The access key may have expired. Ask your administrator</td></tr>
+<tr><td>A case is missing on this phone</td><td>Turn on sync in Settings, then open <strong>Recent Cases</strong></td></tr>
+<tr><td>Forgot how something works</td><td>Tap <strong>Help</strong>, then <strong>User Guide</strong> or <strong>Quick Start Guide</strong></td></tr>
+<tr><td>No signal at the airplane</td><td>Tap <strong>Download Data For Offline Use</strong> in Settings while on Wi-Fi</td></tr>
+<tr><td>Something's broken or missing</td><td>Tap <strong>Help</strong> (the question mark in the top bar), then <strong>Send Feedback</strong>. It goes straight to the Avio.AI team</td></tr>
+</tbody></table>
+<p>Want the long version? The <a href="guide.html">Avio.AI User Guide</a> explains every button, with labeled pictures.</p>
+</body></html>
