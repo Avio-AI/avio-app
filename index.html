@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="8d9f5cc 2026-11-05">
+<meta name="avio-build" content="a2b34c5 2026-11-05">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -4996,7 +4996,8 @@ async function initCheckPane(){
 function renderChecks(){
   const P=$('#checkPane');if(!P||!ckList())return;const s=ckState(),me=ckTech(),L=ckEff(ckList(),s);const cnt=ckCount(L,s);const pull=ckIsPull(L),lastSlot=pull?L.slots.length-1:-1;
   const seg=`<div class="cksel">${CK.lists.map(l=>`<button type="button" class="${l.id===CK_ID?'on':''}" data-ck="${esc(l.id)}">${esc(l.short||l.title)}</button>`).join('')}<button type="button" id="ckImp" title="Import your operator's checklist (PDF)"><span class="ms" style="font-size:17px;vertical-align:-3px">upload_file</span> Import</button></div>`;
-  const hdr=`<div class="ckhdr">${CK_HDR.map(([k,lab])=>`<div class="field"><label>${lab}</label><input data-h="${k}" value="${esc(s.hdr[k]||'')}" autocomplete="off" ${['reg','date'].includes(k)?'autocapitalize="characters"':''} ${['tt','ldg','apuHrs'].includes(k)?'inputmode="decimal"':''}></div>`).join('')}</div>`;
+  const hdr=`<div class="ckhdr">${CK_HDR.map(([k,lab])=>`<div class="field"><label>${lab}</label><input data-h="${k}" value="${esc(s.hdr[k]||'')}" autocomplete="off" ${['reg','date'].includes(k)?'autocapitalize="characters"':''} ${['tt','ldg','apuHrs'].includes(k)?'inputmode="decimal"':''}></div>`).join('')}
+    <div class="field"><label>Your Initials</label><input id="ckInit" value="${esc(me.init)}" maxlength="4" autocapitalize="characters" autocomplete="off" style="text-transform:uppercase"></div></div>`;   // next to APU Hours
   const slotBtn=(key,lab)=>{const v=s.marks[key]||'';return `<button type="button" class="ckslot${v?(v==='N/A'||v==='MEL'?' na':' on'):''}" data-m="${key}" data-l="${esc(lab)}" aria-label="${esc(lab||'Initial')}">${v?esc(v):`<span>${esc(lab)}</span>`}</button>`};
   const cols=L.cols||[];
   const secs=L.sections.map((sec,si)=>{const sc=sec.items.reduce((a,it,ii)=>{if(it.gone)return a;ckSlots(L,it).forEach((_,k)=>{a.n++;if(s.marks[`${sec.xk||si}.${ii}.${k}`])a.d++});return a},{n:0,d:0});
@@ -5008,7 +5009,6 @@ function renderChecks(){
   P.innerHTML=`<div class="card cktop"><div class="cksh"><h3>${esc(L.title)}</h3><span style="display:flex;gap:6px"><button class="btn2 small" type="button" id="ckEdit"><span class="ms" style="font-size:18px;vertical-align:-4px">edit</span> Edit</button><button class="btn2 small" type="button" id="ckHist"><span class="ms" style="font-size:18px;vertical-align:-4px">history</span> History</button></span></div>${seg}
       <div class="ckprog"><div style="width:${cnt.n?Math.round(cnt.done/cnt.n*100):0}%"></div></div><div class="hint" id="ckProg" style="margin:4px 0 0">${cnt.done} of ${cnt.n} initialed</div></div>
     <div class="card"><div class="hint" style="margin:0 0 10px">${esc(ckSrcLine(L))}${L.note?' '+esc(L.note):''}</div><h3>Aircraft</h3>${hdr}
-      <div class="grid2"><div class="field"><label>Your Initials</label><input id="ckInit" value="${esc(me.init)}" maxlength="4" autocapitalize="characters" autocomplete="off" style="text-transform:uppercase"></div><div></div></div>
       <div class="hint" style="margin:0">${pull?'Initial Pulled when you pull it and Reset when you reset it. Tap Reset again for MEL (left pulled under an MEL action), again to clear.':'Tap a line to initial it. Tap again for N/A, again to clear.'}</div></div>
     ${secs}
     <div class="card"><h3>Sign-Off</h3>
