@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="4c12571 2026-11-06">
+<meta name="avio-build" content="56ee852 2026-11-06">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -202,6 +202,8 @@ mark{background:var(--mark-bg);color:var(--amber-glow);border-radius:2px}
 .helprow>.ms{font-size:26px;color:var(--amber)}.helprow>span:nth-child(2){flex:1;min-width:0}.helprow b{display:block}.helprow small{display:block;opacity:.75;font-weight:400;margin-top:2px}.helprow .go{font-size:22px;opacity:.6;color:inherit}
 .helpbar{display:flex;gap:8px;justify-content:space-between;margin:0 0 10px}.helpbar .btn2,.helpbar a{display:inline-flex;align-items:center;gap:4px;text-decoration:none}.helpbar .ms{font-size:18px}
 .helpframe{display:block;width:100%;height:calc(92dvh - 150px);min-height:360px;border:0;border-radius:12px;background:#fff}
+#modal.helpfull{padding:0}#modal.helpfull .sheet{max-width:none;width:100%;height:var(--app-h,100dvh);max-height:var(--app-h,100dvh);border-radius:0;padding-top:var(--safe-t)}
+#modal.helpfull .sheet:before{display:none}#modal.helpfull .helpframe{height:calc(var(--app-h,100dvh) - 150px - var(--safe-t) - var(--safe-b))}
 .bad{outline:2px solid #b3261e;outline-offset:1px}
 .savewarn.info{background:var(--amber);color:#1a1200}
 .savewarn{position:fixed;left:12px;right:12px;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:300;background:#b3261e;color:#fff;border-radius:12px;padding:10px 14px;font-size:14px;line-height:1.35;box-shadow:0 4px 16px rgba(0,0,0,.3);cursor:pointer}
@@ -2668,8 +2670,8 @@ document.addEventListener('click',async e=>{
 /* ═════════════════ MODAL ═════════════════ */
 const TITLE_KEEP=new Set(['AMDL','MEL','MMEL','PDF','CMC','CAS','FIM','ATA','API','AI','PN','SN','LRU','CB']);
 function niceTitle(t){t=String(t||'');if(!/^[A-Z][A-Z &/·.\-]*$/.test(t))return t;return t.split(' ').map(w=>{const mc=MANS.find(x=>x.toUpperCase()===w);return mc||(TITLE_KEEP.has(w)||/\./.test(w)?w:w.charAt(0)+w.slice(1).toLowerCase())}).join(' ')}
-function showModal(title,html){$('#modalTitle').textContent=niceTitle(title);$('#modalBody').innerHTML=html;$('#modal').classList.remove('hidden');$('#modalBody').scrollTop=0}
-function hideModal(){$('#modal').classList.add('hidden');$$('#modalBody .pdfpage canvas').forEach(c=>{c.width=0;c.height=0})}
+function showModal(title,html){$('#modalTitle').textContent=niceTitle(title);$('#modalBody').innerHTML=html;$('#modal').classList.remove('hidden','helpfull');$('#modalBody').scrollTop=0}
+function hideModal(){$('#modal').classList.add('hidden');$('#modal').classList.remove('helpfull');$$('#modalBody .pdfpage canvas').forEach(c=>{c.width=0;c.height=0})}
 document.addEventListener('click',e=>{if(e.target.closest&&e.target.closest('#pgRet')&&window._pgRet){const f=window._pgRet;window._pgRet=null;f()}});
 $('#modalClose').onclick=hideModal;$('#modal').addEventListener('click',e=>{if(e.target.id==='modal')hideModal()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')hideModal()});
@@ -5208,9 +5210,12 @@ function openHelp(){
     ${ver?`<div class="hint" style="margin-top:6px;text-align:center">Avio.AI build ${esc(ver)}</div>`:''}`);
   $('#hpQuick').onclick=()=>openGuide('quick');$('#hpGuide').onclick=()=>openGuide('guide');$('#hpFb').onclick=openFeedback}
 function openGuide(k){const g=HELP_GUIDES[k],src='help/'+g.file;
-  showModal(g.title,`<div class="helpbar"><button type="button" class="btn2 small" id="hpBack"><span class="ms">arrow_back</span> Help</button><a class="btn2 small" href="${src}" target="_blank" rel="noopener"><span class="ms">open_in_new</span> Open in New Tab</a></div>
+  showModal(g.title,`<div class="helpbar"><button type="button" class="btn2 small" id="hpBack"><span class="ms">arrow_back</span> Help</button><button type="button" class="btn2 small" id="hpFull"><span class="ms">open_in_full</span> Full Screen</button></div>
     <iframe class="helpframe" src="${src}" title="${esc(niceTitle(g.title))}"></iframe>`);
-  $('#hpBack').onclick=openHelp}
+  // full screen stays inside the app (a new tab in the Home Screen app opens with no way back)
+  const full=on=>{$('#modal').classList.toggle('helpfull',on);$('#hpFull').innerHTML=on?'<span class="ms">close_fullscreen</span> Exit Full Screen':'<span class="ms">open_in_full</span> Full Screen'};
+  $('#hpFull').onclick=()=>full(!$('#modal').classList.contains('helpfull'));
+  $('#hpBack').onclick=()=>{full(false);openHelp()}}
 $('#btnHelp').onclick=openHelp;
 window.addEventListener('online',()=>fbFlush().catch(()=>{}));setTimeout(()=>fbFlush().catch(()=>{}),4000);
 
