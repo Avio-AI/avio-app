@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="c5189e7 2026-11-06">
+<meta name="avio-build" content="4c12571 2026-11-06">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -467,6 +467,7 @@ mark{background:var(--mark-bg);color:inherit}
 /* paint the bottom bar color down to the screen edge (home-indicator area / any gap under the app) */
 html,body{background:linear-gradient(to bottom,var(--bg) 0,var(--bg) 50%,var(--nav) 50%,var(--nav) 100%)}
 html:has(body.inchat),body.inchat{background:var(--bg)}
+
 .tabs{box-shadow:0 -1px 0 var(--border),0 60px 0 0 var(--nav)}
 #app{background:var(--bg)}
 
@@ -485,6 +486,9 @@ main{overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
 /* bottom bar visible on every screen, including an open troubleshooting case */
 body.kb .tabs,body.inchat .tabs{display:flex}
 html:has(body.inchat),body.inchat{background:linear-gradient(to bottom,var(--bg) 0,var(--bg) 50%,var(--nav) 50%,var(--nav) 100%)}
+/* iPhone Home Screen app (iOS 26): iOS keeps a strip of the screen and fills it with the page's background color, so that color
+   is the bottom bar's (shown on every screen) instead of nothing; the top strip takes the header color through theme-color */
+html,body,html:has(body.inchat),body.inchat{background-color:var(--nav)}
 
 /* composer sits right on the bottom bar (the bar already covers the home-indicator area) */
 #composer{padding:6px 12px 8px}
@@ -941,9 +945,13 @@ function effectiveTheme(){return cfg.theme==='light'||cfg.theme==='dark'?cfg.the
 function applyTheme(){
   const t=cfg.theme||'auto',root=document.documentElement;
   if(t==='auto')root.removeAttribute('data-theme');else root.setAttribute('data-theme',t);
-  const m=document.getElementById('metaTheme');if(m)m.setAttribute('content',effectiveTheme()==='light'?'#f8fafd':'#131314');
+  paintEdges();
   const b=document.getElementById('btnTheme');if(b){b.innerHTML=THEMES[t][0];b.title=THEMES[t][1];b.setAttribute('aria-label',THEMES[t][1])}
 }
+// the system strips take their color from the page: the top one (theme-color) matches the header, the bottom one the bar beside it
+function paintEdges(){const m=document.getElementById('metaTheme');if(!m)return;
+  const h=document.querySelector('header');let c='';if(h){const t=h.style.transition;h.style.transition='none';c=getComputedStyle(h).backgroundColor;h.style.transition=t}   // the settled color, not mid-fade
+  m.setAttribute('content',c&&!/rgba\(0, 0, 0, 0\)|transparent/.test(c)?c:(effectiveTheme()==='light'?'#f8fafd':'#131314'))}
 function setTheme(t){cfg.theme=t;saveCfg();applyTheme()}
 document.getElementById('btnTheme').onclick=()=>setTheme({auto:'light',light:'dark',dark:'auto'}[cfg.theme||'auto']);
 if(mqLight)(mqLight.addEventListener?mqLight.addEventListener('change',applyTheme):mqLight.addListener(applyTheme));
@@ -2920,8 +2928,8 @@ function flash(btn,msg){const o=btn.textContent;btn.textContent=msg;btn.disabled
 function resetForm(){PH_INTAKE.forEach(phDel);PH_INTAKE=[];renderPending();selFaults=[];renderFaultChips();selCmc=[];renderCmcChips();$('#cmcInput').value='';['#descText','#fAlt','#fSpd','#fOat','#fCabAlt','#fDp','#fRate','#fOther','#fSn','#fReg','#fApt','#fRecent','#fDone','#faultInput'].forEach(i=>$(i).value='');prefillAircraft();$('#timesDetails').open=false;renderFormTimes(null);['#fPhase','#fBehavior','#fSide'].forEach(i=>$(i).value='');$('#readings').innerHTML='';$('#moreDetails').open=false;$('#phaseDetails').open=false}
 
 /* ═════════════════ CHAT ═════════════════ */
-function showChat(){$('#intakeView').classList.add('hidden');$('#chatView').classList.remove('hidden');document.body.classList.add('inchat');$$('.tab').forEach(x=>x.classList.toggle('on',x.dataset.tab==='describe'));document.body.dataset.tab='describe'}
-function showIntake(){$('#chatView').classList.add('hidden');$('#intakeView').classList.remove('hidden');document.body.classList.remove('inchat');$('#caseTitle').textContent='';$('#main').scrollTop=0}
+function showChat(){requestAnimationFrame(paintEdges);$('#intakeView').classList.add('hidden');$('#chatView').classList.remove('hidden');document.body.classList.add('inchat');$$('.tab').forEach(x=>x.classList.toggle('on',x.dataset.tab==='describe'));document.body.dataset.tab='describe'}
+function showIntake(){requestAnimationFrame(paintEdges);$('#chatView').classList.add('hidden');$('#intakeView').classList.remove('hidden');document.body.classList.remove('inchat');$('#caseTitle').textContent='';$('#main').scrollTop=0}
 const FOLLOW=['SSPC / CB','AMM Procedure','Access'];
 const FOLLOW_FULL={'SSPC / CB':'Which SSPC or circuit breaker powers this? Give the number, panel and location.','AMM Procedure':'Give me the AMM procedure for this: task number, steps, tools and references.','Access':'What access is needed for this: which floor boards, service panels, access doors or equipment racks, with their numbers and locations?','IPC':'Give me the IPC data for this: part numbers, figure and item, and effectivity.','Next check?':'What should I check next?','Show the wiring':'Show me the wiring for this','Pins to meter':'Which connector pins / wires do I meter?','Power / CB?':'Which circuit breaker / power controller feeds this?','Part numbers':'Part numbers for the likely LRU','Ops check':'Ops check after the repair','System logic':'Explain the system logic','Logbook entry':'Summarize for the logbook'};
 function renderFollowChips(){$('#followChips').innerHTML=FOLLOW.map(t=>`<button class="qchip">${esc(t)}</button>`).join('');$$('#followChips .qchip').forEach(b=>b.onclick=()=>{$('#chatInput').value=FOLLOW_FULL[b.textContent]||b.textContent;sendChat()})}
