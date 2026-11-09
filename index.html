@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="56ee852 2026-11-06">
+<meta name="avio-build" content="e85fea1 2026-11-09">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -638,8 +638,21 @@ html.sysbar{--safe-b:0px}
 .docrow{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.docchip{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--border2,var(--border));background:none;color:inherit;border-radius:10px;padding:4px 10px;font:inherit;font-size:13px;cursor:pointer}
 .docchip .ms{font-size:18px;color:var(--red)}
 </style>
+<style>/* launch splash, in the avioai.com style: Lato Light wordmark (only these letters, inlined), copper on the site's warm black */
+@font-face{font-family:AvioMark;src:url(data:font/woff2;base64,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) format("woff2");font-display:block}
+#splash{position:fixed;inset:0;z-index:10000;background:#1d1919;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity .45s ease}
+#splash .wm{font-family:AvioMark,Lato,sans-serif;font-weight:300;font-size:clamp(44px,15vw,96px);letter-spacing:.09em;padding-left:.09em;line-height:1;
+  background:linear-gradient(135deg,#f0cf93 0%,#e7bd74 45%,#c9964f 100%);-webkit-background-clip:text;background-clip:text;color:transparent;animation:spIn .7s ease both}
+#splash .rule{width:56px;height:1px;margin-top:18px;background:linear-gradient(90deg,transparent,#c9964f,transparent);animation:spIn .7s .15s ease both}
+#splash.out{opacity:0;pointer-events:none}
+@keyframes spIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){#splash .wm,#splash .rule{animation:none}#splash{transition:none}}
+</style>
 </head>
 <body>
+<div id="splash" aria-hidden="true"><div class="wm">AVIO.AI</div><div class="rule"></div></div>
+<script>/* once per launch: the reloads after switching aircraft don't show it again */
+try{if(sessionStorage.getItem('avio_splash'))document.getElementById('splash').remove();else sessionStorage.setItem('avio_splash','1')}catch(e){}</script>
 <div id="app">
   <header>
     <div class="hrow">
@@ -1025,6 +1038,7 @@ const optional=p=>p.catch(e=>{if(e&&e.status===404)return null;throw e});
 function reloadFor(ac){const want=JSON.stringify(ac);let ok=store.set('avio_ac',ac);try{ok=ok&&localStorage.getItem('avio_ac')===want}catch(e){ok=false}
   let again=false;try{again=sessionStorage.getItem('avio_rl')===want;if(ok&&!again)sessionStorage.setItem('avio_rl',want)}catch(e){}
   if(!ok||again){saveWarn('This browser is not keeping the app\'s settings (private browsing, or storage is full): your aircraft choice and cases may not be saved.');return false}
+  try{if(document.getElementById('splash'))sessionStorage.removeItem('avio_splash')}catch(e){}   // still launching: the splash carries on after the reload
   location.reload();return true}
 async function loadFleet(){
   FLEET=null;FC=null;DPATH='';OPERATOR=null;
@@ -5220,6 +5234,10 @@ $('#btnHelp').onclick=openHelp;
 window.addEventListener('online',()=>fbFlush().catch(()=>{}));setTimeout(()=>fbFlush().catch(()=>{}),4000);
 
 /* ═════════════════ BOOT ═════════════════ */
+// the splash stays at least 1.2 s from launch and leaves when the data is loaded (3 s at most)
+function hideSplash(){const sp=document.getElementById('splash');if(!sp||sp.classList.contains('out'))return;
+  setTimeout(()=>{sp.classList.add('out');setTimeout(()=>sp.remove(),600)},Math.max(0,1200-performance.now()))}
+setTimeout(hideSplash,3000);
 (async function boot(){
   await bigInit();
   renderFaultChips();renderFollowChips();
@@ -5239,7 +5257,7 @@ window.addEventListener('online',()=>fbFlush().catch(()=>{}));setTimeout(()=>fbF
   if(FC&&FC.mode==='mel'){const mi=$('#melInput');if(mi)mi.placeholder='Inoperative item or CAS message, e.g. Pack, Weather Radar, 21-1';const t=document.querySelector('.tab[data-tab=mel]');if(t)t.click();return}
   const cur=store.get(PFX+'_current',null);
   if(cur){const c=loadCases().find(x=>x.id===cur);if(c){CASE=c;showChat();renderCase()}}
-})();
+})().finally(hideSplash);
 
 /* ═════════ Sheets and the on-screen keyboard ═════════
    While the keyboard is up, the open sheet is sized to the visible screen above it (visualViewport), and the field being typed in
