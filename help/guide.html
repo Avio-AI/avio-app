@@ -24,7 +24,6 @@ figure.pdfpic img{width:85%;max-height:none}
 p:has(+ figure){break-after:avoid}
 h2{break-before:auto}
 </style>
-<meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 @media screen{body{max-width:760px;margin:0 auto;padding:18px 16px 40px;font-size:16px;background:#fff}
 figure img{max-height:none;height:auto}figure.strip img{width:100%;max-width:560px}figure.pdfpic img{width:100%}
@@ -32,7 +31,7 @@ table{display:block;overflow-x:auto}}
 </style>
 </head><body>
 <h1>Avio.AI User Guide</h1>
-<p class="byline">4 NOV 2026 · Gabriel</p>
+<p class="byline">9 NOV 2026 · Gabriel</p>
 
 <h2>Welcome Aboard</h2>
 <p>Avio.AI is a pocket-sized maintenance helper: you tell it what the airplane is doing, and it digs through your manuals faster than a crew chief looking for the last donut. It reads only your company's own manuals, so it never makes up a book that doesn't exist.</p>
@@ -48,13 +47,13 @@ table{display:block;overflow-x:auto}}
 <li>Paste the <strong>Anthropic API Key</strong> in Settings. This is what wakes up the AI assistant. Without it, Search (manuals and wiring), MEL and PFI still work, but the chat stays quiet.</li>
 <li>Type your name under <strong>Technician Name</strong>. It shows on every case you start, so people know whom to thank (or whom to call).</li>
 </ol>
-<figure class=""><img src="01-welcome.webp" loading="lazy" alt="Welcome screen"></figure>
+<figure><img src="01-welcome.webp" loading="lazy" alt="Welcome screen"></figure>
 <p>Just want to look around first? Tap <strong>Try the Demo Aircraft</strong>. It is a made-up jet with made-up manuals, so you can't break anything real.</p>
 <p><strong>Keys are like house keys.</strong> Don't text them, email them, or tape them to the hangar fridge. If one leaks, tell your administrator so they can change it.</p>
 
 <h2>Picking Your Aircraft</h2>
 <p>Tap the aircraft name in the top bar to open the picker. Each aircraft type keeps its own manuals, cases and settings, so a hydraulic problem on one model never wanders into another model's notes.</p>
-<figure class=""><img src="03-picker.webp" loading="lazy" alt="Aircraft picker"></figure>
+<figure><img src="03-picker.webp" loading="lazy" alt="Aircraft picker"></figure>
 <ul>
 <li><strong>Tails you've worked on</strong> show under each type. Tap one to jump right back in. Tap <strong>✕</strong> to remove it from the list (there's an <strong>Undo</strong>, for the oops moments).</li>
 <li><strong>Types you never touch</strong> can be hidden with <strong>✕</strong> too. Nothing is deleted; it just stops cluttering your screen. <strong>Show hidden aircraft</strong> brings them back.</li>
@@ -75,17 +74,17 @@ table{display:block;overflow-x:auto}}
 <tr><td><strong>Search</strong></td><td>Two tools behind one switch. <strong>Manuals</strong>: type words, part names or chapter numbers and read the matching pages. <strong>Wiring</strong>: look up a connector, see which wire goes to which pin, and follow a wire end to end</td><td>No</td></tr>
 </tbody></table>
 <p>Here's the <strong>Search</strong> tab after a search for "temperature sensor". The switch at the top flips between Manuals and Wiring, and the app remembers whichever one you used last:</p>
-<figure class=""><img src="11-search.webp" loading="lazy" alt="Search tab"></figure>
+<figure><img src="11-search.webp" loading="lazy" alt="Search tab"></figure>
 <p><strong>Knowledge base:</strong> if your company's data includes a fault isolation knowledge base, Search shows its matches above the manual pages, along with the fix that worked most often. Think of it as notes from every tech who chased this gremlin before you:</p>
-<figure class=""><img src="26-kb-search.webp" loading="lazy" alt="Knowledge base match"></figure>
+<figure><img src="26-kb-search.webp" loading="lazy" alt="Knowledge base match"></figure>
 <p>Tap a match to see the messages that usually come with it, every known fix, how many times each one worked, what was repaired and what the technician saw. The AI checks the same knowledge base during a case, and tapping its knowledge base citations opens this same sheet. It's great advice, but it's still advice: the manual decides.</p>
-<figure class=""><img src="27-kb-sheet.webp" loading="lazy" alt="Knowledge base sheet"></figure>
+<figure><img src="27-kb-sheet.webp" loading="lazy" alt="Knowledge base sheet"></figure>
 <p><strong>Tip:</strong> on the Wiring side of Search, enter the aircraft's serial number. Wiring changes between serial numbers, and the app loads the drawings for your exact airplane. Skip it and you might be reading the wiring for its cousin.</p>
 <p>On Search, tap Wiring at the top. Type a connector name, pick <strong>Connector Pin-Out</strong>, and tap <strong>Look Up</strong>:</p>
-<figure class=""><img src="14-wiring.webp" loading="lazy" alt="Wiring tab"></figure>
+<figure><img src="14-wiring.webp" loading="lazy" alt="Wiring tab"></figure>
 <p>The pin-out shows every wire on the connector. Tap a wire to see it on the drawing:</p>
-<figure class=""><img src="15-pinout.webp" loading="lazy" alt="Pin-out"></figure>
-<figure class=""><img src="16-diagram.webp" loading="lazy" alt="Wiring drawing"></figure>
+<figure><img src="15-pinout.webp" loading="lazy" alt="Pin-out"></figure>
+<figure><img src="16-diagram.webp" loading="lazy" alt="Wiring drawing"></figure>
 
 <h2>Starting a Case and Chatting With the AI</h2>
 <p>A "case" is one problem on one airplane, from first squawk to final signature. The more you tell the app at the start, the less it has to guess.</p>
@@ -97,14 +96,15 @@ table{display:block;overflow-x:auto}}
 <li>Tap <strong>Add Photo</strong> to take a picture or pick one from your phone's photo library. The AI can read the text on a screen or a part label.</li>
 <li>Tap <strong>Fix My Plane ▸</strong>. (It won't actually fix it. That part is still you.)</li>
 </ol>
-<figure class=""><img src="04-describe-top.webp" loading="lazy" alt="Describe tab"></figure>
-<figure class=""><img src="05-describe-flight.webp" loading="lazy" alt="Flight details"></figure>
-<figure class=""><img src="06-describe-phase.webp" loading="lazy" alt="Flight phase and conditions"></figure>
+<figure><img src="04-describe-top.webp" loading="lazy" alt="Describe tab"></figure>
+<figure><img src="05-describe-flight.webp" loading="lazy" alt="Flight details"></figure>
+<figure><img src="06-describe-phase.webp" loading="lazy" alt="Flight phase and conditions"></figure>
 <p>The AI answers with likely causes in order, the tests to run, and the manual pages that back it up. Reply in the chat box with what you found, like "connector was loose" or "reading was 28 volts", and it adjusts the plan. You can also tap the microphone to talk instead of type, which is handy when your hands are covered in hydraulic fluid.</p>
-<figure class=""><img src="07-chat.webp" loading="lazy" alt="AI answer"></figure>
+<figure><img src="07-chat.webp" loading="lazy" alt="AI answer"></figure>
 <p><strong>Tap every citation.</strong> It opens the manual page so you can see it with your own eyes. The AI is smart, but the manual is the law.</p>
+<p><strong>Switching cases mid-answer?</strong> If you open another case (or tap New) while the AI is still typing, the app stops that answer first, so nothing lands in the wrong case. No crossed wires, which is the whole point of this job.</p>
 <p>If your company has connected the manual PDFs, a citation opens the real manual page with your words highlighted. Pinch to zoom, swipe left or right to turn the page, and tap <strong>Text</strong> for plain words. The demo jet has no PDFs, so it shows the text view:</p>
-<figure class=""><img src="08-citation.webp" loading="lazy" alt="Manual page"></figure>
+<figure><img src="08-citation.webp" loading="lazy" alt="Manual page"></figure>
 
 <h2>Deferring With the MEL</h2>
 <p>The MEL (Minimum Equipment List) says what can be broken while the airplane still flies legally, and for how long. The MEL tab looks it up for you; your company's own approved MEL still has the final say.</p>
@@ -115,9 +115,11 @@ table{display:block;overflow-x:auto}}
 <li>Read each relief option. Some items have several, labeled <strong>Option 1 of 2</strong>, and so on. Look for <strong>REQUIRED</strong> tags on the maintenance (M) and operations (O) steps.</li>
 <li>Tap <strong>Create Deferral PDF</strong>, or your company's discrepancy form if it has one set up.</li>
 </ol>
-<figure class=""><img src="12-mel.webp" loading="lazy" alt="MEL tab"></figure>
-<figure class=""><img src="13-mel-pdf.webp" loading="lazy" alt="MEL relief"></figure>
-<p>During a case, the AI only records a deferral after the fault can't be fixed before the next flight, the relief conditions fit the airplane, and <strong>you</strong> choose to defer. A card then appears in the chat with the category and repair-by date. The repair-by date counts from the <strong>Day of Discovery</strong> on the card, which starts as the day you opened the case; if the squawk was found earlier, change it there (or just tell the AI). Think of the app as the friend who reminds you about the deadline, not the one who decides to skip the homework.</p>
+<figure><img src="12-mel.webp" loading="lazy" alt="MEL tab"></figure>
+<figure><img src="13-mel-pdf.webp" loading="lazy" alt="MEL relief"></figure>
+<p>During a case, the AI only records a deferral after the fault can't be fixed before the next flight, the relief conditions fit the airplane, and <strong>you</strong> choose to defer. A card then appears in the chat with the category and repair-by date. Think of the app as the friend who reminds you about the deadline, not the one who decides to skip the homework.</p>
+<p>The repair-by date counts from the <strong>Day of Discovery</strong> on the card. It starts as the day you opened the case. If the squawk was found earlier, change it right on the card, or just tell the AI ("the crew wrote it up two days ago") and it sets the date for you. The repair-by date updates either way.</p>
+<figure><img src="36-case-deferral.webp" loading="lazy" alt="Deferral card with Day of Discovery"></figure>
 
 <h2>Wrapping Up a Case</h2>
 <p>When the problem is fixed, tell the AI in plain words, for example "replaced the valve, ops check good." It writes a log-style corrective action that cites the removal and test tasks it found. Check the wording before you use it; it's your entry, not the robot's.</p>
@@ -128,17 +130,22 @@ table{display:block;overflow-x:auto}}
 <li><strong>Case Brief:</strong> a one-page summary for Tech Ops, field reps and crew. Find it in the status bar at the top of the chat. Email it, save the PDF or copy the text.</li>
 <li><strong>Close Case:</strong> tap the status bar, then <strong>Close Case</strong>. Closed cases stay in <strong>Recent Cases</strong>, and you can reopen one if the problem comes back for a sequel.</li>
 </ul>
-<figure class=""><img src="09-brief.webp" loading="lazy" alt="Case brief"></figure>
+<figure><img src="09-brief.webp" loading="lazy" alt="Case brief"></figure>
 <p>All paperwork comes from the <strong>Export Case</strong> button too, along with the <strong>Full Report PDF</strong> for the whole step-by-step story.</p>
+<figure><img src="10-export.webp" loading="lazy" alt="Export case"></figure>
 <p><strong>Part numbers from the IPC:</strong> if your company's data includes the IPC (Illustrated Parts Catalog), the Component Log Entry looks up the part name you type and drops the best match into the empty P/N boxes. It searches your job's own chapter first, so a hose from the water system doesn't get mixed up with one from an engine. Each match shows the part number, its name and the IPC page. Tap a match to use it, or tap the page button to read the IPC page with the part number highlighted, then tap <strong>‹ Log Entry</strong> to come right back with everything you typed still there. Already typed a P/N? The app checks it in the IPC and puts a ✔ on it when it's listed.</p>
-<p>The IPC lists the part numbers that are approved, not the one that's actually bolted to your airplane. Always check the P/N against the data plate and fix the box if it's different.</p>
-<figure class=""><img src="10-export.webp" loading="lazy" alt="Export case"></figure>
+<p>The IPC lists the part numbers that are approved, not the one that's actually bolted to your airplane. Always check the P/N against the data plate and fix the box if it's different. The robot reads catalogs; you read data plates.</p>
+<figure><img src="33-le-ipc.webp" loading="lazy" alt="Component Log Entry with IPC part numbers"></figure>
+<p><strong>Signing the log entry:</strong> near the bottom, under <strong>Work Performed By: Signature</strong>, sign with your finger. Or tap <strong>Import Signature</strong> to use a photo of your signature on white paper, or <strong>Use My Saved Signature</strong> if you've saved one before (on the PFI tab, for example). <strong>Clear</strong> starts over. When you tap <strong>Create Log Entry PDF</strong>, your signature lands on the Work Performed By line. Leave it blank and you sign the printout in ink, the old-fashioned way. If your company's repair tag has a signature box, the repair tag section gets its own <strong>Authorized Signature</strong> pad that works the same way.</p>
+<figure><img src="34-le-sign.webp" loading="lazy" alt="Signing the log entry"></figure>
+<p><strong>The discrepancy log</strong> (your company's form, from the MEL tab or during a case) works the same way. Open <strong>Corrective Action, Parts, Return To Service</strong>, type the <strong>Part Name (IPC Look Up)</strong>, and the P/N boxes fill in from the IPC. During a case, the discrepancy log and the Component Log Entry share one set of part and serial numbers, so change one and the other follows along. The form also has two signature pads: <strong>Deferred By: Signature</strong> for the deferral and <strong>Corrective Action: Signature</strong> for the fix. If your company's form has no spot set up for a signature, the app tells you, and you sign the printout.</p>
+<figure><img src="35-amdl-ipc-sign.webp" loading="lazy" alt="Discrepancy log with IPC lookup and signature"></figure>
 
 <h2>Checklists on the PFI Tab</h2>
 <p>The PFI tab (short for pre-flight inspection, though it holds all your company's checklists) turns your company's checklists into tap-to-initial lists, then makes a neat one-page PDF. No more coffee rings on the walk-around card. The tab is always there, even before your company adds a checklist, because you can import your own (see below).</p>
 <ol>
 <li>Open <strong>PFI</strong> and pick a checklist at the top, like <strong>Post-Flight</strong>, <strong>Pre-Flight</strong> or <strong>CBs</strong> (circuit breakers). The title, the list buttons and the progress bar stay pinned at the top while you scroll, so you never lose your place. <strong>Edit</strong> and <strong>Import</strong> live up there too (more on those below).</li>
-<li>Fill in the <strong>Aircraft</strong> box: date, tail number, serial number and times. Type <strong>Your Initials</strong> once.</li>
+<li>Fill in the <strong>Aircraft</strong> box: date, tail number, serial number and times. Type <strong>Your Initials</strong> once, in the last box, right next to <strong>APU Hours</strong>.</li>
 <li>Tap a line to initial it. Tap again for <strong>N/A</strong>. Tap a third time to clear it. Some lines have <strong>L</strong> and <strong>R</strong> boxes for the left and right sides, and some have boxes for numbers, like tire pressure.</li>
 <li>On servicing lines, type what you found and what you put in (or drained) in the <strong>Added</strong> boxes. That way the amount of oil you added ends up on the record, not just on your sleeve.</li>
 <li>At the bottom, type your name and certificate number and sign with your finger. Or tap <strong>Import Signature</strong> and pick a photo of your signature on white paper: the app removes the paper, keeps just the ink, and saves it on your phone. Next time, tap <strong>Use My Saved Signature</strong>.</li>
@@ -146,24 +153,24 @@ table{display:block;overflow-x:auto}}
 <li>Tap <strong>Save &amp; Start New</strong>, then tap it again to confirm. The finished checklist goes into History and you get a fresh copy.</li>
 </ol>
 <p>The bar at the top counts what's done ("2 of 9 initialed"), like a progress bar in a video game, except the prize is an airworthy airplane.</p>
-<figure class=""><img src="19-checks-top.webp" loading="lazy" alt="PFI tab"></figure>
-<figure class=""><img src="20-checks-items.webp" loading="lazy" alt="Checklist lines"></figure>
+<figure><img src="19-checks-top.webp" loading="lazy" alt="PFI tab"></figure>
+<figure><img src="20-checks-items.webp" loading="lazy" alt="Checklist lines"></figure>
 <p>Servicing lines have a box for the reading and an <strong>Added</strong> box for what you put in:</p>
-<figure class=""><img src="24-checks-servicing.webp" loading="lazy" alt="Servicing checklist"></figure>
-<figure class=""><img src="21-checks-sign.webp" loading="lazy" alt="Sign-off"></figure>
+<figure><img src="24-checks-servicing.webp" loading="lazy" alt="Servicing checklist"></figure>
+<figure><img src="21-checks-sign.webp" loading="lazy" alt="Sign-off"></figure>
 <p>Circuit breaker lists (CBs / SSPCs) work the same way, with a <strong>Pulled</strong> box and a <strong>Reset</strong> box on each breaker. Tap <strong>Reset</strong> once for your initials. Tap it again and it says <strong>MEL</strong>, for a breaker an MEL action keeps pulled on purpose. Until every pulled breaker is reset (or marked MEL), a yellow reminder sits at the top of every tab and the app icon shows a badge. With sync on, your teammates see it too. Tap <strong>Open</strong> on the reminder to jump straight to the list:</p>
-<figure class=""><img src="22-checks-cbs.webp" loading="lazy" alt="Circuit breaker list"></figure>
+<figure><img src="22-checks-cbs.webp" loading="lazy" alt="Circuit breaker list"></figure>
 <p>Need to pull a breaker that isn't on the list, like one an MEL (M) procedure calls for? Tap <strong>Add CB / SSPC for This Event</strong>. Type its name exactly as printed on the panel, its panel and location, and why you're pulling it. It's added to this checklist only, with its own Pulled and Reset boxes, so it can't sneak off the paperwork:</p>
-<figure class=""><img src="28-cb-add.webp" loading="lazy" alt="Add CB / SSPC"></figure>
+<figure><img src="28-cb-add.webp" loading="lazy" alt="Add CB / SSPC"></figure>
 <p>Here's the finished PDF. Only the lines you initialed or marked N/A are filled in:</p>
 <figure class="pdfpic"><img src="23-checks-pdf.webp" loading="lazy" alt="Exported checklist"></figure>
 <p><strong>History:</strong> tap <strong>History</strong> at the top of the PFI tab to see every checklist saved for this aircraft, with the tail number, date, how far along it is and who initialed it. Tap <strong>Open</strong> to keep working on one or export it again. Tap <strong>✕</strong> twice to delete one.</p>
-<figure class=""><img src="25-checks-history.webp" loading="lazy" alt="Checklist History"></figure>
+<figure><img src="25-checks-history.webp" loading="lazy" alt="Checklist History"></figure>
 <p><strong>Two technicians, one checklist:</strong> if your company turned on case sync in Settings, checklists are shared too. A teammate on another phone opens the same checklist from History, adds their initials and signs, and the PDF gets a signature row for each of you. With sync off, the checklist stays on your phone. The note under the signature box tells you which one you have.</p>
 <p><strong>Fixing a checklist:</strong> spot a typo or a missing line? Tap <strong>Edit</strong> at the top of any checklist. Every line shows up as plain text you can reword, add or delete. Tick <strong>I checked every line of this checklist</strong>, then tap <strong>Save Changes</strong>. With sync on, the fix reaches every technician on this aircraft type. With sync off, it stays on your phone. Changed your mind? <strong>Restore the Data Set Version</strong> (tap it twice) puts your company's original back.</p>
-<figure class=""><img src="29-checks-edit.webp" loading="lazy" alt="Edit checklist"></figure>
+<figure><img src="29-checks-edit.webp" loading="lazy" alt="Edit checklist"></figure>
 <p><strong>Bringing in your own form:</strong> tap <strong>Import</strong>, then <strong>Choose PDF</strong> and pick your company's inspection form (an MSI, for example). The AI writes it out as a checklist, so this part needs the Anthropic API key. You check every line against the pictures of the original pages, fix anything it got wrong, tick the box and tap <strong>Approve &amp; Add Checklist</strong>. Nobody can use it until you approve it. With sync on, everyone gets it. Later, <strong>Edit</strong> fixes a line or loads a new revision of the form, and <strong>Remove This Checklist</strong> (tap twice) takes it away for everyone.</p>
-<figure class=""><img src="30-checks-import.webp" loading="lazy" alt="Import checklist"></figure>
+<figure><img src="30-checks-import.webp" loading="lazy" alt="Import checklist"></figure>
 <p>The checklist on your phone is a helper. If it and the current manual ever disagree, the manual wins (you've heard that one before).</p>
 
 <h2>Case Email and Syncing Across Devices</h2>
@@ -174,8 +181,8 @@ table{display:block;overflow-x:auto}}
 <li><strong>Replies:</strong> when Tech Ops answers, the app shows a banner like "2 case emails to file." Tap <strong>Review</strong>, check it matched the right case, then tap <strong>Import</strong>. Attachments come in as documents or photos, and the AI reads them and updates the case.</li>
 <li><strong>Notifications:</strong> tap <strong>Turn On Notifications</strong> in Settings → Case Email to get a ping on your phone when a reply arrives.</li>
 </ul>
-<figure class=""><img src="17-sync.webp" loading="lazy" alt="Sync settings"></figure>
-<figure class=""><img src="18-email.webp" loading="lazy" alt="Email settings"></figure>
+<figure><img src="17-sync.webp" loading="lazy" alt="Sync settings"></figure>
+<figure><img src="18-email.webp" loading="lazy" alt="Email settings"></figure>
 <p>If an email lands on the wrong case, don't import it. Pick the right case in the review sheet first.</p>
 
 <h2>Getting Help and Sending Feedback</h2>
@@ -185,10 +192,10 @@ table{display:block;overflow-x:auto}}
 <li><strong>User Guide</strong>: this guide, with every button explained. Tap <strong>Help</strong> at the top to go back, or <strong>Full Screen</strong> to read it on the whole screen (<strong>Exit Full Screen</strong> or <strong>Help</strong> brings you back).</li>
 <li><strong>Send Feedback</strong>: a direct line to the Avio.AI team.</li>
 </ul>
-<figure class=""><img src="32-help.webp" loading="lazy" alt="Help menu"></figure>
+<figure><img src="32-help.webp" loading="lazy" alt="Help menu"></figure>
 <p>Found a bug, missing a manual, or have an idea? Tap <strong>Help</strong>, then <strong>Send Feedback</strong>. Pick a type (<strong>Bug</strong>, <strong>Idea</strong>, <strong>Manual / Data</strong>, <strong>Checklist</strong> or <strong>Other</strong>), then type what happened or tap <strong>PTT</strong> and say it. Tap <strong>Add Screenshot</strong> if a picture helps, and leave your email or phone if you'd like a reply. Then tap <strong>Send Feedback</strong>.</p>
 <p>It goes straight to the Avio.AI team. The app attaches your aircraft type, the tab you're on, your company's name and your device type, but never manual pages or case data. No signal? It waits on your phone and goes out later. Complaints about the coffee should still go to the crew chief.</p>
-<figure class=""><img src="31-feedback.webp" loading="lazy" alt="Send feedback"></figure>
+<figure><img src="31-feedback.webp" loading="lazy" alt="Send feedback"></figure>
 
 <h2>Golden Rules and Quick Fixes</h2>
 <p>Five rules keep you and the airplane out of trouble:</p>
@@ -196,7 +203,7 @@ table{display:block;overflow-x:auto}}
 <li><strong>The manual wins.</strong> Check every citation. If the app and the manual disagree, follow the manual and tell your administrator.</li>
 <li><strong>Your company's MEL wins</strong> over the master MEL shown in the app. It may be stricter.</li>
 <li><strong>Enter the serial number.</strong> Wiring and some parts change from one airplane to the next.</li>
-<li><strong>You sign, the app doesn't.</strong> Read every log entry and form before you put your name on it.</li>
+<li><strong>You sign, the app doesn't.</strong> Read every log entry and form before you put your name on it, in ink or on the screen. Check IPC part numbers against the data plate.</li>
 <li><strong>Guard your keys.</strong> Never share access keys in a text, email or photo.</li>
 </ol>
 <table><thead><tr><th>Problem</th><th>Quick Fix</th></tr></thead><tbody>
@@ -205,6 +212,8 @@ table{display:block;overflow-x:auto}}
 <tr><td>A case is missing on this device</td><td>Turn on sync, then open <strong>Recent Cases</strong> to pull the latest</td></tr>
 <tr><td>Wiring looks wrong for this airplane</td><td>Check the serial number on the Describe tab or in Search → Wiring</td></tr>
 <tr><td>Working where there's no signal</td><td>Tap <strong>Download Data For Offline Use</strong> in Settings before you leave Wi-Fi</td></tr>
+<tr><td>A red "Not saved on this device" banner</td><td>Your phone's storage for the app is full. Keep the app open, delete old cases, or turn on sync so your cases are kept in the cloud too</td></tr>
+<tr><td>A yellow "New data is available" note</td><td>Your company updated the aircraft data. Tap the note to load it when you reach a good stopping point. The app waits for you instead of reloading in the middle of your work</td></tr>
 <tr><td>Something else is weird</td><td>Close the app, reopen it, then ask your administrator. Turning it off and on again is a classic for a reason</td></tr>
 </tbody></table>
 </body></html>
