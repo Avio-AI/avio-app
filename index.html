@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="ea9f217 2026-11-09">
+<meta name="avio-build" content="8ed6ae2 2026-11-12">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -205,6 +205,8 @@ mark{background:var(--mark-bg);color:var(--amber-glow);border-radius:2px}
 #modal.helpfull{padding:0}#modal.helpfull .sheet{max-width:none;width:100%;height:var(--app-h,100dvh);max-height:var(--app-h,100dvh);border-radius:0;padding-top:var(--safe-t)}
 #modal.helpfull .sheet:before{display:none}#modal.helpfull .helpframe{height:calc(var(--app-h,100dvh) - 150px - var(--safe-t) - var(--safe-b))}
 .bad{outline:2px solid #b3261e;outline-offset:1px}
+.caselock{display:flex;gap:10px;align-items:flex-start;margin:8px 12px;padding:10px 12px;border-radius:12px;background:var(--panel2);border:1px solid var(--amber);font-size:14px;line-height:1.35}
+.caselock .ms{color:var(--amber)}
 .savewarn.info{background:var(--amber);color:#1a1200}
 .savewarn{position:fixed;left:12px;right:12px;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:300;background:#b3261e;color:#fff;border-radius:12px;padding:10px 14px;font-size:14px;line-height:1.35;box-shadow:0 4px 16px rgba(0,0,0,.3);cursor:pointer}
 .backdrop{position:fixed;inset:0;background:var(--overlay);backdrop-filter:blur(6px);z-index:100;display:flex;align-items:flex-end;justify-content:center}
@@ -2056,12 +2058,16 @@ function withCacheBreakpoint(msgs){
 let CASE=null; // {id,title,created,updated,form,msgs:[api messages],usage:{in,out}}
 let BUSY=false,RUN=null;
 // switch the open case; a run in progress belongs to the case it started on, so stop it and wait for it first
-async function switchCase(c){if(BUSY){ABORT?.abort();try{await RUN}catch(e){}}CASE=c}
+async function switchCase(c){
+  if(BUSY&&c&&CASE&&c.id===CASE.id)return;   // reopening the case that is answering: keep the live copy, nothing to stop
+  if(BUSY){ABORT?.abort();try{await RUN}catch(e){}}CASE=c}
 function runAgent(){RUN=runAgent0().catch(e=>console.error(e));return RUN}
 async function runAgent0(){
   if(!cfg.anthropicKey){openSettings('Add your Anthropic API key to use the AI assistant.');return}
   const c=CASE;if(!c)return;
+  if(caseBusyElsewhere(c)){renderCaseLock();return}
   BUSY=true;ABORT=new AbortController();const ac=ABORT;setSendState();
+  c.running={by:(typeof syCfg==='function'&&syCfg().tech)||cfg.techName||'',dev:(typeof syCfg==='function'&&syCfg().dev)||'',at:Date.now()};saveCase(c);
   const live=()=>{if(ac.signal.aborted||CASE!==c)throw Object.assign(new Error('Stopped.'),{name:'AbortError'})};
   try{await useWiringFor((c.form&&c.form.sn)||'')}catch(e){console.error(e)}
   const TL=buildTools();const tools=TL.map((t,i)=>i===TL.length-1?{...t,cache_control:{type:'ephemeral'}}:t);
@@ -2100,8 +2106,27 @@ async function runAgent0(){
   }catch(e){
     if(e.name==='AbortError'){view.error('Stopped.');fixDanglingToolUse(c)}
     else{view.error(e.message+(e.status===401?'\n\nCheck your Anthropic API key in Settings.':e.status===429?'\n\nRate limited — wait a moment and resend.':''));fixDanglingToolUse(c)}
-  }finally{BUSY=false;if(ABORT===ac)ABORT=null;setSendState();saveCase(c);if(CASE===c)renderFollowChips()}
+  }finally{BUSY=false;if(ABORT===ac)ABORT=null;delete c.running;setSendState();saveCase(c);if(CASE===c)renderFollowChips()}
 }
+/* A case that is getting an AI answer on another device (synced cases): it opens read-only with a notice, refreshes
+   itself from the cases repo, and unlocks when that answer is saved. A marker older than 3 minutes (app closed mid-answer) is ignored. */
+function caseBusyElsewhere(c){const r=c&&c.running;if(!r)return false;const me=(typeof syCfg==='function'&&syCfg().dev)||'';
+  return r.dev!==me&&Date.now()-Math.max(r.at||0,c.updated||0)<180000}
+let LOCK_T=0;
+function renderCaseLock(){
+  const busy=!!(CASE&&!BUSY&&caseBusyElsewhere(CASE));let el=$('#caseLock');
+  if(!busy){if(el)el.remove();clearTimeout(LOCK_T);LOCK_T=0;$('#btnSend').disabled=false;$('#chatInput').disabled=false;return}
+  if(!el){el=document.createElement('div');el.id='caseLock';el.className='caselock';$('#chatLog').before(el)}
+  const who=CASE.running.by||'Another technician';
+  el.innerHTML=`<span class="ms">hourglass_top</span><span><b>${esc(who)}</b> is getting an AI answer for this case on another device. It will show here when it's done; you can reply after that.</span>`;
+  $('#btnSend').disabled=true;$('#chatInput').disabled=true;
+  clearTimeout(LOCK_T);LOCK_T=setTimeout(refreshLockedCase,6000)}
+async function refreshLockedCase(){
+  LOCK_T=0;const id=CASE&&CASE.id;if(!id||BUSY||!(typeof syOn==='function'&&syOn())){renderCaseLock();return}
+  try{const remote=await syFetch(id);
+    if(CASE&&CASE.id===id&&!BUSY&&(remote.updated||0)>(CASE.updated||0)){syStoreLocal(remote);CASE=remote;renderCase();return}}
+  catch(e){console.warn(e)}
+  renderCaseLock()}
 function fixDanglingToolUse(c=CASE){
   // keep message history valid if a run was interrupted mid-tool-loop
   const last=c.msgs[c.msgs.length-1];
@@ -2224,7 +2249,7 @@ function renderCase(){
   {const w=$('#wSn');if(w)w.value=(CASE.form&&CASE.form.sn)||''}useWiringFor((CASE.form&&CASE.form.sn)||'').catch(()=>{});
   syncSessName();
   {const slots=$$('#chatLog .deferralslot');if(slots.length&&(CASE.deferral||CASE.clearing))loadMel().then(()=>{const c=deferralCard();if(c)slots[slots.length-1].replaceWith(c)}).catch(()=>{})}
-  renderFollowChips();
+  renderFollowChips();renderCaseLock();
   requestAnimationFrame(()=>{stickBottom=true;autoScroll()});
 }
 function summarize(d){if(!d)return'';if(d.error)return'error';if(d.matches)return`${d.matches.length} matches`;if(d.results)return`${d.results.length} hits`;if(d.tables)return d.tables.map(t=>t.connector).join(', ');if(d.segments)return`${d.segments.length} segments`;if(d.pages)return d.pages.map(p=>p.cite).join(', ').slice(0,90);if(d.documents)return`${d.total} docs`;return''}
@@ -2952,6 +2977,7 @@ function renderFollowChips(){$('#followChips').innerHTML=FOLLOW.map(t=>`<button 
 function setSendState(){const s=$('#btnSend');s.classList.toggle('stop',BUSY);s.innerHTML=BUSY?'<span class="ms fill">stop</span>':'<span class="ms">arrow_upward</span>';s.title=BUSY?'Stop':'Send'}
 function sendChat(){
   if(BUSY){ABORT?.abort();return}
+  if(CASE&&caseBusyElsewhere(CASE)){renderCaseLock();return}
   if(CASE&&CASE.status==='closed'){openBrief();return}
   const t=$('#chatInput').value.trim();if((!t&&!PH_CHAT.length)||!CASE)return;
   $('#chatInput').value='';autoGrow();
@@ -3035,7 +3061,7 @@ async function syPush(c){
     if(r.status===409||r.status===422){ // changed on another device: the newer copy wins
       sha=await syShaOf(c.id);if(!sha)continue;
       const remote=await syFetch(c.id);
-      if((remote.updated||0)>(c.updated||0)){syStoreLocal(remote);const i=syIdx();i[c.id]=syMeta(remote,sha);sySetIdx(i);syMark(c.id,false);
+      if((remote.updated||0)>(c.updated||0)&&!(BUSY&&CASE&&CASE.id===c.id)){syStoreLocal(remote);const i=syIdx();i[c.id]=syMeta(remote,sha);sySetIdx(i);syMark(c.id,false);
         if(CASE&&CASE.id===c.id&&!BUSY){CASE=remote;renderCase()}return}
       continue}
     throw new Error(syErr(r));
@@ -3073,7 +3099,7 @@ async function syPull(){
   for(const f of files){const id=f.name.slice(0,-5);seen.add(id);if(!idx[id]||idx[id].sha!==f.sha)todo.push([id,f.sha])}
   for(let k=0;k<todo.length;k+=4)await Promise.all(todo.slice(k,k+4).map(async([id,sha])=>{
     const remote=await syFetch(id);const l=loadCases().find(x=>x.id===id);
-    if(l&&(l.updated||0)>(remote.updated||0)){syMark(id,true);idx[id]={...syMeta(l,sha)};return}
+    if(l&&((l.updated||0)>(remote.updated||0)||(BUSY&&CASE&&CASE.id===id))){syMark(id,true);idx[id]={...syMeta(l,sha)};return}
     idx[id]=syMeta(remote,sha);if(!dirty.has(id)){syStoreLocal(remote);if(CASE&&CASE.id===id&&!BUSY&&(remote.updated||0)>(CASE.updated||0)){CASE=remote;renderCase()}}}));
   // removed on another device
   for(const id of Object.keys(idx))if(!seen.has(id)&&!dirty.has(id)){delete idx[id];store.set(SY_PFX+'_cases',loadCases().filter(x=>x.id!==id))}
@@ -3093,10 +3119,10 @@ function syStat(){const c=syCfg();
   for(const id of ['#syStat','#syStat2']){const e=$(id);if(e)e.innerHTML=html}}
 // every save also goes to the cases repo (debounced)
 const _syLocalSave=saveCase;let _syT=null;
-saveCase=function(){
-  if(CASE&&syOn()){const t=syCfg().tech;if(!CASE.by&&t)CASE.by=t;if(t)CASE.editedBy=t}
-  _syLocalSave();
-  if(!CASE||!syOn())return;syMark(CASE.id,true);clearTimeout(_syT);_syT=setTimeout(()=>syFlush(),1500);
+saveCase=function(k=CASE){
+  if(k&&syOn()){const t=syCfg().tech;if(!k.by&&t)k.by=t;if(t)k.editedBy=t}
+  _syLocalSave(k);
+  if(!k||!syOn())return;syMark(k.id,true);clearTimeout(_syT);_syT=setTimeout(()=>syFlush(),BUSY&&k.running?600:1500);   // mid-answer: share progress sooner
 };
 // Recent Cases: this device + every synced device
 function syAll(){
@@ -3114,7 +3140,8 @@ function syRenderCases(){
   $$('.caselist .t').forEach(el=>el.onclick=async()=>{
     let c=loadCases().find(x=>x.id===el.dataset.id);
     if(!c){el.style.opacity=.5;try{c=await syFetch(el.dataset.id);syStoreLocal(c)}catch(e){SY.err=e.message;syStat();el.style.opacity=1;return}}
-    await switchCase(c);try{localStorage.setItem(SY_PFX+'_current',JSON.stringify(c.id))}catch(e){}hideModal();showChat();renderCase()});
+    await switchCase(c);try{localStorage.setItem(SY_PFX+'_current',JSON.stringify(c.id))}catch(e){}hideModal();showChat();renderCase();
+    if(!BUSY&&syOn()&&!(CASE&&CASE.running))refreshLockedCase()});   // pick up a newer copy, or an answer in progress on another device
   $$('.caselist [data-del]').forEach(b=>b.onclick=async()=>{const id=b.dataset.del;const cur=CASE&&CASE.id===id;if(cur)await switchCase(null);{const c0=loadCases().find(c=>c.id===id);if(c0)(c0.msgs||[]).forEach(m=>photoIds(m).forEach(phDel))}
     store.set(SY_PFX+'_cases',loadCases().filter(c=>c.id!==id));
     if(cur)showIntake();
