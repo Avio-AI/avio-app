@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="8ed6ae2 2026-11-12">
+<meta name="avio-build" content="a4f7491 2026-11-12">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -864,6 +864,8 @@ const DEFAULTS={anthropicKey:'',githubToken:'',dataRepo:'',dataBranch:'main',dat
 const BIG_RX=/^avio_.+_(cases|ck_runs|ck_custom)$|^avio_fb_queue$/;
 const BIG={mem:new Map(),ready:false,off:false,dirty:new Set(),timer:0,err:null};
 let _bigdb=null;
+// Safari on iPhone and iPad sometimes never answers an IndexedDB open (no success, no error): every wait on it has a time limit
+function withTimeout(p,ms,what){let t;return Promise.race([p,new Promise((_,no)=>{t=setTimeout(()=>no(Object.assign(new Error(what+' did not answer'),{timeout:true})),ms)})]).finally(()=>clearTimeout(t))}
 function bigDb(){if(!_bigdb)_bigdb=new Promise((ok,no)=>{const r=indexedDB.open('avio_store',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv',{keyPath:'k'});r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)}).catch(e=>{_bigdb=null;throw e});return _bigdb}
 async function bigFlush(){clearTimeout(BIG.timer);BIG.timer=0;if(!BIG.dirty.size||BIG.off)return true;const ks=[...BIG.dirty];BIG.dirty.clear();
   try{const db=await bigDb();await new Promise((ok,no)=>{const t=db.transaction('kv','readwrite'),st=t.objectStore('kv');
@@ -871,13 +873,14 @@ async function bigFlush(){clearTimeout(BIG.timer);BIG.timer=0;if(!BIG.dirty.size
     if(BIG.err){BIG.err=null;saveWarn(null)}return true}
   catch(e){ks.forEach(k=>BIG.dirty.add(k));BIG.err=e;saveWarn('Not saved on this device: '+((e&&e.name==='QuotaExceededError')?'storage is full':(e&&e.message)||'storage error')+'. Keep the app open, free space (delete old cases) or turn on case sync.');return false}}
 async function bigInit(){
-  try{const db=await bigDb();
-    const all=await new Promise((ok,no)=>{const r=db.transaction('kv').objectStore('kv').getAll();r.onsuccess=()=>ok(r.result||[]);r.onerror=()=>no(r.error)});
+  try{let db;try{db=await withTimeout(bigDb(),3000,'Saved cases storage')}catch(e){if(!e.timeout)throw e;_bigdb=null;db=await withTimeout(bigDb(),4000,'Saved cases storage')}   // one retry: the second open usually answers
+    const all=await withTimeout(new Promise((ok,no)=>{const r=db.transaction('kv').objectStore('kv').getAll();r.onsuccess=()=>ok(r.result||[]);r.onerror=()=>no(r.error)}),5000,'Saved cases storage');
     for(const {k,v} of all)if(!BIG.mem.has(k))BIG.mem.set(k,v);
     const moved=[];for(let i=localStorage.length-1;i>=0;i--){const k=localStorage.key(i);if(!BIG_RX.test(k))continue;   // older copies move out of localStorage
       if(!BIG.mem.has(k)){try{BIG.mem.set(k,JSON.parse(localStorage.getItem(k)));BIG.dirty.add(k)}catch(e){continue}}moved.push(k)}
     if(await bigFlush())moved.forEach(k=>{try{localStorage.removeItem(k)}catch(e){}})}
-  catch(e){console.warn('IndexedDB unavailable, using localStorage',e);BIG.off=true;BIG.mem.clear()}
+  catch(e){console.warn('IndexedDB unavailable, using localStorage',e);BIG.off=true;BIG.mem.clear();
+    if(e&&e.timeout)setTimeout(()=>saveWarn('This device\'s saved cases could not be opened (the browser\'s storage did not answer). Close the app completely and open it again; until then new work is kept in a small backup store.'),0)}
   BIG.ready=true}
 addEventListener('pagehide',()=>{bigFlush()});document.addEventListener('visibilitychange',()=>{if(document.hidden)bigFlush()});
 function notice(msg,onTap){let el=document.getElementById('dataNote');if(el)el.remove();el=document.createElement('div');el.id='dataNote';el.className='savewarn info';el.textContent=msg;
@@ -1770,7 +1773,7 @@ async function callClaude(body,handlers){
 // Photos live in this device's IndexedDB (resized JPEG, long side ≤ 1568 px). Case messages hold {type:'image', avio_photo:id};
 // they are expanded to base64 image blocks only when sent to the AI. Synced cases carry the reference, not the photo.
 const PH_DB='avio-photos',PH_MAX=1568,PH_CACHE=new Map();let _phdb=null;
-function phDb(){if(!_phdb)_phdb=new Promise((ok,no)=>{const r=indexedDB.open(PH_DB,1);r.onupgradeneeded=()=>r.result.createObjectStore('p',{keyPath:'id'});r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)}).catch(e=>{_phdb=null;throw e});return _phdb}
+function phDb(){if(!_phdb)_phdb=withTimeout(new Promise((ok,no)=>{const r=indexedDB.open(PH_DB,1);r.onupgradeneeded=()=>r.result.createObjectStore('p',{keyPath:'id'});r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)}),5000,'Photo storage').catch(e=>{_phdb=null;throw e});return _phdb}
 async function phTx(mode,fn){const db=await phDb();return new Promise((ok,no)=>{const t=db.transaction('p',mode);const st=t.objectStore('p');const r=fn(st);t.oncomplete=()=>ok(r&&r.result);t.onerror=()=>no(t.error)})}
 const phPut=rec=>phTx('readwrite',st=>st.put(rec));
 const phDel=id=>phTx('readwrite',st=>st.delete(id)).catch(()=>{});
@@ -5265,12 +5268,17 @@ window.addEventListener('online',()=>fbFlush().catch(()=>{}));setTimeout(()=>fbF
 function hideSplash(){const sp=document.getElementById('splash');if(!sp||sp.classList.contains('out'))return;
   setTimeout(()=>{sp.classList.add('out');setTimeout(()=>sp.remove(),600)},Math.max(0,2400-performance.now()))}
 setTimeout(hideSplash,6000);
+// start-up watchdog: if loading stalls, say where (instead of a screen that just sits there) and offer a reload
+const BOOT={step:'starting',done:false};
+setTimeout(()=>{if(BOOT.done)return;console.warn('start-up stalled at',BOOT.step);
+  notice(`Still loading (${BOOT.step})… Tap to reload. If this keeps happening, close the app completely and open it again.`,()=>location.reload())},15000);
 (async function boot(){
-  await bigInit();
+  BOOT.step='saved cases';await bigInit();
+  BOOT.step='aircraft data';
   renderFaultChips();renderFollowChips();
   if(SETUP){openSetup(SETUP);if(!dataConnected())return}
   if(!dataConnected()){setDot('err');renderBadges('Not connected — open Settings');openSettings(null,true);return}
-  await loadCore();
+  await loadCore();BOOT.step='cases';
   setTimeout(()=>refreshFleetInfo().catch(()=>{}),1500);
   setTimeout(()=>mailBoot().catch(e=>console.warn(e)),0);
   ckProbe().catch(()=>{});
@@ -5284,7 +5292,7 @@ setTimeout(hideSplash,6000);
   if(FC&&FC.mode==='mel'){const mi=$('#melInput');if(mi)mi.placeholder='Inoperative item or CAS message, e.g. Pack, Weather Radar, 21-1';const t=document.querySelector('.tab[data-tab=mel]');if(t)t.click();return}
   const cur=store.get(PFX+'_current',null);
   if(cur){const c=loadCases().find(x=>x.id===cur);if(c){CASE=c;showChat();renderCase()}}
-})().finally(hideSplash);
+})().finally(()=>{BOOT.done=true;hideSplash()});
 
 /* ═════════ Sheets and the on-screen keyboard ═════════
    While the keyboard is up, the open sheet is sized to the visible screen above it (visualViewport), and the field being typed in
