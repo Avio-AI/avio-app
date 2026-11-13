@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="a4f7491 2026-11-12">
+<meta name="avio-build" content="fa4eb27 2026-11-13">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -908,6 +908,88 @@ function saveCfg(){
   const K=store.get('avio_keys',{});Object.assign(K,{anthropicKey:cfg.anthropicKey||'',githubToken:cfg.githubToken||'',src:Object.fromEntries((cfg.sources||[]).filter(x=>x.token).map(x=>[x.id,x.token]))});
   store.set('avio_keys',K,cfg.remember);
   store.set('avio_cfg',{...cfg,anthropicKey:'',githubToken:'',sources:(cfg.sources||[]).map(({token,...x})=>x)},true)}
+/* ═════════ Avio.AI sign-in (Phase 2): passkey → access service → one-hour GitHub tokens ═════════
+   The access service (broker) knows each technician's operator and returns two short-lived tokens from the Avio.AI
+   GitHub App: read-only on the operator's data repos, read-write on its cases repo. The app keeps the session in
+   avio_keys (follows "Remember keys"), adds the operator's repos as managed connections, and swaps in fresh tokens
+   before they expire or when GitHub answers 401. Nothing long-lived is typed into the phone. */
+const BRK_URL=(()=>{try{return localStorage.getItem('avio_broker_url')||''}catch(e){return ''}})()||'https://avio-broker.gabriel-a7e.workers.dev';
+const bu=b=>{const a=new Uint8Array(b);let t='';for(let i=0;i<a.length;i++)t+=String.fromCharCode(a[i]);return btoa(t).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')},ub=s=>Uint8Array.from(atob(String(s).replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
+const BRK={get s(){return keys.get('brk')},set s(v){keys.set('brk',v)},busy:null};
+async function brkCall(path,body,session){
+  let r;try{r=await fetch(BRK_URL+path,{method:'POST',headers:{'content-type':'application/json',...(session?{authorization:'Bearer '+session}:{})},body:JSON.stringify(body||{}),cache:'no-store'})}
+  catch(e){throw Object.assign(new Error('The Avio.AI sign-in service could not be reached. Check the connection and try again.'),{net:true})}
+  const j=await r.json().catch(()=>({}));if(!r.ok)throw Object.assign(new Error(j.error||('Sign-in service error '+r.status)),{status:r.status});return j}
+async function brkJoin(code){
+  if(!window.PublicKeyCredential)throw new Error('This browser cannot make passkeys. Use Safari on iPhone or iPad (iOS 16 or later).');
+  const o=await brkCall('/auth/join/options',{code});const pk=o.publicKey;
+  const c=await navigator.credentials.create({publicKey:{...pk,challenge:ub(pk.challenge),user:{...pk.user,id:ub(pk.user.id)}}});
+  const v=await brkCall('/auth/join/verify',{cid:o.cid,id:c.id,clientDataJSON:bu(c.response.clientDataJSON),attestationObject:bu(c.response.attestationObject)});
+  return v.session}
+async function brkLogin(){
+  if(!window.PublicKeyCredential)throw new Error('This browser cannot use passkeys.');
+  const o=await brkCall('/auth/login/options',{});const pk=o.publicKey;
+  const c=await navigator.credentials.get({publicKey:{...pk,challenge:ub(pk.challenge)}});
+  const v=await brkCall('/auth/login/verify',{cid:o.cid,id:c.id,clientDataJSON:bu(c.response.clientDataJSON),authenticatorData:bu(c.response.authenticatorData),signature:bu(c.response.signature),userHandle:c.response.userHandle?bu(c.response.userHandle):null});
+  return v.session}
+// fetch tokens for a session and wire the operator's repos into this device
+async function brkApply(session,{first}={}){
+  const t=await brkCall('/token',{},session);const exp=x=>x?Date.parse(x.expires_at)||Date.now()+3e6:0;
+  const s={session,name:t.user.name,op:t.operator,data:{token:t.data.token,exp:exp(t.data)},cases:t.casesToken?{token:t.casesToken.token,exp:exp(t.casesToken)}:null,cases_repo:t.cases};
+  const was=BRK.s;BRK.s=s;
+  if(was){for(const k of ['data','cases'])if(was[k]&&was[k].token&&(!s[k]||was[k].token!==s[k].token))BRK_OLD.set(was[k].token,k)}
+  const keep=cfg.sources.filter(x=>x.managed!=='brk');
+  const mine=t.sources.map(x=>({id:'brk_'+x.repo.replace(/[^\w]/g,'_')+(x.path?'_'+x.path.replace(/[^\w]/g,'_'):''),mode:'github',repo:x.repo,branch:x.branch||'main',path:x.path||'',url:'',token:s.data.token,managed:'brk',name:x.name}));
+  cfg.sources=[...mine,...keep];
+  if(first||!activeSrc())cfg.active=(mine[0]||cfg.sources[0]||{}).id||'';
+  applySource();saveCfg();
+  if(t.cases&&s.cases){const c=syCfg();const fresh=c.repo!==t.cases;Object.assign(c,{on:true,repo:t.cases,token:s.cases.token});if(fresh||!c.tech)c.tech=t.user.name;sySave(c)}
+  return s}
+const BRK_OLD=new Map();
+async function brkRefresh(){
+  if(BRK.busy)return BRK.busy;const s=BRK.s;if(!s||!s.session)return false;
+  BRK.busy=(async()=>{try{await brkApply(s.session);return true}
+    catch(e){if(e.status===401||e.status===403){brkDrop();notice((e.message||'Sign in again.')+' Tap to open Settings.',()=>openSettings())}return false}
+    finally{setTimeout(()=>{BRK.busy=null},0)}})();
+  return BRK.busy}
+function brkDrop(){const s=BRK.s;if(!s)return;BRK.s=null;
+  for(const x of cfg.sources)if(x.managed==='brk')x.token='';saveCfg();
+  const c=syCfg();if(s.cases_repo&&c.repo===s.cases_repo){c.token='';sySave(c)}}
+async function brkSignOut(){const s=BRK.s;if(s&&s.session)brkCall('/auth/logout',{},s.session).catch(()=>{});
+  brkDrop();cfg.sources=cfg.sources.filter(x=>x.managed!=='brk');if(!activeSrc())cfg.active=(cfg.sources[0]||{}).id||'';applySource();saveCfg();
+  const c=syCfg();if(s&&s.cases_repo&&c.repo===s.cases_repo){Object.assign(c,{on:false,token:''});sySave(c)}}
+// every GitHub call goes through here: a token issued by the access service is renewed when due, and a 401 retries once
+{const _fetch=window.fetch.bind(window);
+  const kindOf=tok=>{const s=BRK.s;if(!s||!tok)return null;if(s.data&&s.data.token===tok)return 'data';if(s.cases&&s.cases.token===tok)return 'cases';return BRK_OLD.get(tok)||null};
+  const hdr=(init,set)=>{const h=init&&init.headers;if(!h)return null;
+    if(h instanceof Headers){const v=h.get('Authorization');if(set!=null)h.set('Authorization','Bearer '+set);return v}
+    const k=Object.keys(h).find(k=>k.toLowerCase()==='authorization');if(!k)return null;const v=h[k];if(set!=null)h[k]='Bearer '+set;return v};
+  window.fetch=async(input,init)=>{
+    const url=typeof input==='string'?input:(input&&input.url)||'';
+    if(!url.startsWith('https://api.github.com/')||!BRK.s)return _fetch(input,init);
+    const tok=String(hdr(init)||'').replace(/^Bearer\s+/i,'');const kind=kindOf(tok);
+    if(!kind)return _fetch(input,init);
+    let s=BRK.s;if(!s[kind]||s[kind].exp-Date.now()<120000){await brkRefresh();s=BRK.s;if(!s||!s[kind])return _fetch(input,init)}
+    init={...init,headers:init.headers instanceof Headers?new Headers(init.headers):{...init.headers}};hdr(init,s[kind].token);
+    let r=await _fetch(input,init);
+    if(r.status===401&&await brkRefresh()&&BRK.s&&BRK.s[kind]){hdr(init,BRK.s[kind].token);r=await _fetch(input,init)}
+    return r}}
+document.addEventListener('visibilitychange',()=>{const s=BRK.s;if(document.visibilityState==='visible'&&s&&s.data&&s.data.exp-Date.now()<600000)brkRefresh()});
+function brkSettingsHtml(){const s=BRK.s;
+  return `<h3 class="amh">Sign In</h3>${s&&s.session?`<div class="kv" id="brkState">Signed in as <b>${esc(s.name||'')}</b> · ${esc((s.op&&s.op.name)||'')}. Access to your organization's manuals and cases renews by itself.</div>
+    <button class="btn2 small" id="brkOut" style="margin:6px 0 4px">Sign Out</button>`
+  :`<div class="hint" style="margin-bottom:8px">If your organization uses Avio.AI sign-in, sign in with Face ID or Touch ID instead of entering GitHub tokens.</div>
+    <button class="btn2" id="brkIn" style="width:100%"><span class="ms">passkey</span>Sign In With Passkey</button>
+    <div class="grid2" style="margin-top:10px;align-items:end"><div class="field" style="margin:0"><label>Invite code (first time on this device)</label><input id="brkCode" placeholder="ABCDE-FGHJK" autocapitalize="characters" autocomplete="off" spellcheck="false"></div>
+    <button class="btn2" id="brkJoin">Join With Invite Code</button></div>`}
+  <div class="hint" id="brkMsg" style="margin-top:6px"></div><hr style="border:none;border-top:1px solid var(--border);margin:14px 0">`}
+function brkWire(){
+  const m=t=>{const e=$('#brkMsg');if(e)e.innerHTML=t};const fail=e=>m(`<span style="color:var(--red)">✖ ${esc(e&&e.name==='NotAllowedError'?'Face ID was cancelled or timed out.':(e.message||e))}</span>`);
+  const done=async(session,how)=>{m('Getting access…');await brkApply(session,{first:true});m(`<span style="color:var(--green)">✔ ${how}. Opening your aircraft…</span>`);setTimeout(connectFresh,700)};
+  if($('#brkIn'))$('#brkIn').onclick=async()=>{try{m('Waiting for Face ID…');await done(await brkLogin(),'Signed in')}catch(e){fail(e)}};
+  if($('#brkJoin'))$('#brkJoin').onclick=async()=>{const code=($('#brkCode').value||'').trim();if(!code){m('<span style="color:var(--red)">Enter the invite code from your administrator.</span>');return}
+    try{m('Creating your passkey…');await done(await brkJoin(code),'Joined')}catch(e){fail(e)}};
+  if($('#brkOut'))$('#brkOut').onclick=async()=>{await brkSignOut();m('Signed out.');setTimeout(connectFresh,500)}}
 /* data connections: cfg.sources = [{id, mode: github|url|device|demo, repo, branch, path, url}], cfg.active = the one in use */
 if(!Array.isArray(cfg.sources)){cfg.sources=cfg.dataMode&&cfg.dataMode!=='none'?[{id:'s1',mode:cfg.dataMode,repo:cfg.dataRepo,branch:cfg.dataBranch,path:cfg.dataPath,url:cfg.dataUrl}]:[];cfg.active=(cfg.sources[0]||{}).id||''}
 for(const x of cfg.sources)if(x.mode==='github'&&x.token==null&&cfg.githubToken)x.token=cfg.githubToken; // each connection keeps its own token
@@ -2739,6 +2821,7 @@ function openSettings(note,welcome){
   showModal(welcome?'WELCOME TO AVIO.AI':'SETTINGS',`
   ${welcome?`<div class="kv" style="margin-bottom:12px"><b>Avio.AI contains no maintenance data.</b> It works from the data your organization already holds under its own licenses, kept in a place you control: your own GitHub repo, your own web server, or files imported onto this device. Connect your data set below, or try the demo aircraft (invented data, not for maintenance use) to see how it works.</div><button class="btn" id="stDemo" style="margin-bottom:14px">Try the Demo Aircraft</button>`:''}
   ${note?`<div class="errbox" style="margin-bottom:12px;color:var(--amber);border-color:var(--amber-dim);background:var(--warn-bg)">${esc(note)}</div>`:''}
+  ${brkSettingsHtml()}
   <h3 class="amh">Your Data</h3>
   <div class="field"><label>Connection</label><select id="stSrc">${cfg.sources.map(x=>`<option value="${esc(x.id)}" ${x.id===cfg.active?'selected':''}>${esc(srcName(x))}</option>`).join('')}<option value="__new" ${cfg.sources.length?'':'selected'}>＋ Add a Connection</option></select>
   <div class="hint">Each connection is one data set: one repo, web folder or device import. The aircraft picker in the top bar lists the aircraft from all of them.</div></div>
@@ -2757,6 +2840,7 @@ function openSettings(note,welcome){
     <div class="hint">The data set stays in this app's storage on this device only. On iPhone and iPad, import a .zip.</div>
     <button class="btn2 small danger" id="stDevClear" style="margin-top:8px">Remove Imported Data From This Device</button>
   </div>
+  <div class="hint hidden" id="stManaged" style="margin:-4px 0 10px">This connection comes from Avio.AI sign-in. Its access renews by itself; sign out above to remove it.</div>
   <button class="btn2 small danger hidden" id="stSrcDel" style="margin:4px 0 10px">Remove This Connection</button>
   ${cfg.sources.some(x=>x.mode==='github'||x.mode==='url')?'<button class="btn2 small" id="stShareSetup" style="margin:4px 0 10px 8px"><span class="ms">share</span>Share Setup Link</button>':''}
   <div id="stDemoNote" class="hint">The demo aircraft uses invented manuals, fault messages, wiring and MEL items so you can try every feature. None of it is real maintenance data.</div>
@@ -2782,11 +2866,16 @@ function openSettings(note,welcome){
   const sync=()=>{const v=$('#stMode').value;$('#stGh').classList.toggle('hidden',v!=='github');$('#stUrl').classList.toggle('hidden',v!=='url');$('#stDev').classList.toggle('hidden',v!=='device');$('#stDemoNote').classList.toggle('hidden',v!=='demo');$('#stOffWrap').classList.toggle('hidden',v==='device'||v==='none')};sync();$('#stMode').onchange=sync;
   devFileCount().then(n=>{const e=$('#stDevInfo');if(e)e.textContent=n?`${n.toLocaleString()} data files are stored on this device. Import again to replace them.`:'No data imported on this device yet. Pick your data set folder, or a .zip of it.'});
   const st=t=>{const e=$('#stStatus');if(e)e.innerHTML=t};
-  const fill=()=>{const id=$('#stSrc').value,x=cfg.sources.find(y=>y.id===id)||{mode:'none'};$('#stMode').value=x.mode;$('#stRepo').value=x.repo||'';$('#stBranch').value=x.branch||'main';$('#stPath').value=x.path||'';$('#stDataUrl').value=x.url||'';$('#stTok').value=id==='__new'?(cfg.githubToken||''):(x.token||'');$('#stSrcDel').classList.toggle('hidden',id==='__new');sync()};
+  const fill=()=>{const id=$('#stSrc').value,x=cfg.sources.find(y=>y.id===id)||{mode:'none'};$('#stMode').value=x.mode;$('#stRepo').value=x.repo||'';$('#stBranch').value=x.branch||'main';$('#stPath').value=x.path||'';$('#stDataUrl').value=x.url||'';$('#stTok').value=id==='__new'?(cfg.githubToken||''):(x.token||'');mgUi(x)};
+  const mgUi=x=>{const id=$('#stSrc').value,mg=x.managed==='brk';
+    $('#stSrcDel').classList.toggle('hidden',id==='__new'||mg);$('#stManaged').classList.toggle('hidden',!mg);
+    for(const k of ['stMode','stRepo','stBranch','stPath','stTok'])$('#'+k).disabled=mg;$('#stTok').closest('.field').classList.toggle('hidden',mg);sync()};
   $('#stSrc').onchange=fill;{const b=$('#stShareSetup');if(b)b.onclick=openShareSetup}
   const collect=()=>{syFromSettings();Object.assign(cfg,{anthropicKey:$('#stKey').value.trim(),model:$('#stModel').value,thinking:$('#stThink').checked,remember:$('#stRemember').checked});
     const sel=$('#stSrc').value,mode=$('#stMode').value;
-    if(mode!=='none'){const tok=$('#stTok').value.trim();if(tok)cfg.githubToken=tok;
+    const was=cfg.sources.find(y=>y.id===sel);
+    if(was&&was.managed==='brk')cfg.active=sel;
+    else if(mode!=='none'){const tok=$('#stTok').value.trim();if(tok)cfg.githubToken=tok;
       const x={mode,token:mode==='github'?tok:'',repo:$('#stRepo').value.trim(),branch:$('#stBranch').value.trim()||'main',path:$('#stPath').value.trim(),url:$('#stDataUrl').value.trim()};
       if(sel==='__new'){x.id='s'+Date.now().toString(36);cfg.sources.push(x)}else{x.id=sel;const i=cfg.sources.findIndex(y=>y.id===sel);if(i>=0)cfg.sources[i]=x;else cfg.sources.push(x)}
       cfg.active=x.id}
@@ -2800,7 +2889,7 @@ function openSettings(note,welcome){
   if($('#stDemo'))$('#stDemo').onclick=()=>{pickMode('demo');collect();connectFresh()};
   $('#stSrcDel').onclick=()=>{const sel=$('#stSrc').value;if(sel==='__new')return;cfg.sources=cfg.sources.filter(x=>x.id!==sel);const fc=store.get('avio_fleetcache',{});delete fc[sel];store.set('avio_fleetcache',fc);
     if(cfg.active===sel)cfg.active=(cfg.sources[0]||{}).id||'';applySource();saveCfg();connectFresh()};
-  $('#stSrcDel').classList.toggle('hidden',$('#stSrc').value==='__new');
+  mgUi(cfg.sources.find(y=>y.id===$('#stSrc').value)||{});brkWire();
   if(DATA.ready&&DATA.manifest)$('#stAbout').innerHTML=`<b>Aircraft:</b> ${esc(PROFILE.aircraft)}${FLEET&&FLEET.length>1?` · ${FLEET.length} aircraft types in this data set`:''} · index built ${esc(dmyStr(DATA.manifest.built||''))}<br>${Object.entries(DATA.manifest.revisions||{}).map(([k,v])=>`${esc(k)}: ${esc(dmyStr(v))}`).join(' · ')}${(DATA.manifest.gaps||[]).length?`<br><b>Known gaps:</b> ${DATA.manifest.gaps.map(esc).join(' · ')}`:''}${OPERATOR&&OPERATOR.name?`<br><b>Operator:</b> ${esc(OPERATOR.name)}`:''}`;
   {const ab=$('#stAbout'),bd=$('#badges');if(ab&&bd&&!bd.dataset.err){const d=document.createElement('div');d.className='stbadges';d.innerHTML=bd.innerHTML;ab.prepend(d)}}
   $('#stSave').onclick=async()=>{
@@ -3156,12 +3245,13 @@ function sySettingsHtml(){const c=syCfg();let person='';try{person=(store.get(SY
   <div class="field"><label style="display:flex;gap:8px;align-items:center;text-transform:none;letter-spacing:0;font-family:var(--sans);font-size:14px;color:var(--text)"><input type="checkbox" id="sySync" style="width:auto" ${c.on?'checked':''}> Sync Case History Across Devices</label>
   <div class="hint">Saves every case to your organization's private GitHub repo so Recent Cases is the same on your phone, tablet and computer, for every aircraft type.</div></div>
   <div class="field"><label>Technician Name</label><input id="syTech" value="${esc(c.tech||person)}" placeholder="Shown on the cases you start or edit" autocapitalize="words"></div>
-  <div class="grid2"><div class="field"><label>Cases repo (owner/name)</label><input id="syRepo" value="${esc(c.repo)}" placeholder="your-org/maintenance-cases" autocapitalize="off"></div>
+  ${BRK.s&&BRK.s.cases_repo&&c.repo===BRK.s.cases_repo?`<div class="hint">Cases are kept in your organization's cases repo through Avio.AI sign-in; access renews by itself.</div>`
+  :`<div class="grid2"><div class="field"><label>Cases repo (owner/name)</label><input id="syRepo" value="${esc(c.repo)}" placeholder="your-org/maintenance-cases" autocapitalize="off"></div>
   <div class="field"><label>Case sync token</label><input id="syTok" type="password" value="${esc(c.token)}" placeholder="github_pat_…" autocomplete="off"></div></div>
-  <div class="hint">Fine-grained token with <b>Contents: Read and write</b> on the cases repo only (your manual data token stays read-only). Leave blank to use the manual data token.</div>
+  <div class="hint">Fine-grained token with <b>Contents: Read and write</b> on the cases repo only (your manual data token stays read-only). Leave blank to use the manual data token.</div>`}
   <div class="hint" id="syStat2"></div>`+(setTimeout(syStat,0),'')}
 function syFromSettings(){const e=$('#sySync');if(!e)return;const c=syCfg();
-  Object.assign(c,{on:e.checked,tech:$('#syTech').value.trim(),repo:$('#syRepo').value.trim()||SY_DEF.repo,token:$('#syTok').value.trim()});sySave(c);SY.err='';
+  Object.assign(c,{on:e.checked,tech:$('#syTech').value.trim()},$('#syRepo')?{repo:$('#syRepo').value.trim()||SY_DEF.repo,token:$('#syTok').value.trim()}:{});sySave(c);SY.err='';
   if(syOn())syPull().catch(e=>{SY.err=String(e.message||e);syStat()})}
 window.addEventListener('online',()=>syFlush());
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&syOn()&&Date.now()-SY.pulled>60000)syPull().catch(e=>{SY.err=String(e.message||e)})});
@@ -4599,6 +4689,10 @@ function parseSetup(){const m=location.hash.match(/^#setup=([A-Za-z0-9_-]+)/);if
       .filter(x=>x.mode==='github'?okRepo(x.repo):/^https:\/\//.test(x.url)).slice(0,30);
     const sync=j.sync&&okRepo(j.sync.repo)?{repo:j.sync.repo}:null;return src.length||sync?{sources:src,sync}:{bad:true}}catch(e){return {bad:true}}}
 const SETUP=parseSetup();
+// invite link from the administrator: …/#join=ABCDE-FGHJK opens Settings with the code filled in
+const JOIN=(location.hash.match(/^#join=([A-Za-z0-9-]{10,11})$/)||[])[1]||'';if(JOIN)try{history.replaceState(null,'',location.pathname+location.search)}catch(e){}
+function openJoin(){openSettings(null,!dataConnected());const c=$('#brkCode');if(c){c.value=JOIN;c.scrollIntoView({block:'center'})}
+  const m=$('#brkMsg');if(m)m.innerHTML=BRK.s&&BRK.s.session?'You are already signed in on this device.':'Tap <b>Join With Invite Code</b>, then use Face ID or Touch ID to make your passkey.'}
 window.addEventListener('hashchange',()=>{const S=parseSetup();if(S)openSetup(S)});
 const srcSame=(a,b)=>a.mode===b.mode&&(a.mode==='github'?String(a.repo).toLowerCase()===String(b.repo).toLowerCase()&&(a.path||'')===(b.path||''):a.url.replace(/\/?$/,'/')===b.url.replace(/\/?$/,'/'));
 function openSetup(S){
@@ -4636,8 +4730,8 @@ function openSetup(S){
 }
 // Settings: make a setup link from this device's connections (repo names and web addresses only)
 function setupLinkFor(){const fc=store.get('avio_fleetcache',{});
-  const src=cfg.sources.filter(x=>x.mode==='github'||x.mode==='url').map(x=>({name:(fc[x.id]||[]).filter(t=>!t.gone&&!t.pending).map(t=>t.name).filter(Boolean).join(', ')||srcLabel(x),mode:x.mode,...(x.mode==='github'?{repo:x.repo,branch:x.branch||'main',path:x.path||''}:{url:x.url})}));
-  const c=syCfg();const j={v:1,sources:src,...(c.repo?{sync:{repo:c.repo}}:{})};
+  const src=cfg.sources.filter(x=>(x.mode==='github'||x.mode==='url')&&x.managed!=='brk').map(x=>({name:(fc[x.id]||[]).filter(t=>!t.gone&&!t.pending).map(t=>t.name).filter(Boolean).join(', ')||srcLabel(x),mode:x.mode,...(x.mode==='github'?{repo:x.repo,branch:x.branch||'main',path:x.path||''}:{url:x.url})}));
+  const c=syCfg(),bs=BRK.s;const j={v:1,sources:src,...(c.repo&&!(bs&&bs.cases_repo===c.repo)?{sync:{repo:c.repo}}:{})};
   return location.origin+location.pathname+'#setup='+b64u.enc(JSON.stringify(j))}
 function openShareSetup(){const u=setupLinkFor();
   showModal('SETUP LINK',`<div class="kv">Send this link to set up Avio.AI on another device or for another technician. It lists this device's data connections${syCfg().repo?' and the case history repo':''}; whoever opens it ticks the ones they want and pastes their own tokens. No token or key is in the link.</div>
@@ -5277,6 +5371,7 @@ setTimeout(()=>{if(BOOT.done)return;console.warn('start-up stalled at',BOOT.step
   BOOT.step='aircraft data';
   renderFaultChips();renderFollowChips();
   if(SETUP){openSetup(SETUP);if(!dataConnected())return}
+  if(JOIN){openJoin();if(!dataConnected()){setDot('err');renderBadges('Not connected — join with your invite code');return}}
   if(!dataConnected()){setDot('err');renderBadges('Not connected — open Settings');openSettings(null,true);return}
   await loadCore();BOOT.step='cases';
   setTimeout(()=>refreshFleetInfo().catch(()=>{}),1500);
