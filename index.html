@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="abaeb78 2026-11-13">
+<meta name="avio-build" content="83550c1 2026-11-13">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -2316,7 +2316,8 @@ function newAiBubble(){
       if(!r.error&&r.data&&r.data.recorded){const c=deferralCard();if(c){$$('#chatLog .deferralcard').forEach(x=>x.remove());t.after(c)}}
       if(!r.error&&r.data&&r.data.part_id&&typeof partCard==='function'){$$('#chatLog .partcard').forEach(x=>{if(x.dataset.part===r.data.part_id)x.remove()});const pc=partCard(r.data.part_id);if(pc)t.after(pc)}},
     resetPending(){},
-    finish(u){typing.remove();flush();const d=document.createElement('div');d.className='usage';d.textContent=`case tokens · in ${fmtK(u.in)} · out ${fmtK(u.out)} · ${cfg.model}`;wrap.appendChild(d);autoScroll()},
+    finish(u){typing.remove();flush();const d=document.createElement('div');d.className='usage';d.textContent=`case tokens · in ${fmtK(u.in)} · out ${fmtK(u.out)} · ${cfg.model}`;wrap.appendChild(d);autoScroll();
+      if(stickBottom)setTimeout(()=>{if(wrap.isConnected)scrollToAnswer(wrap)},80)},
     error(msg){typing.remove();flush();const d=document.createElement('div');d.className='errbox';d.textContent=msg;wrap.appendChild(d);autoScroll()}
   };
   return api;
@@ -2324,6 +2325,17 @@ function newAiBubble(){
 const fmtK=n=>n>=1000?(n/1000).toFixed(1)+'k':String(n);
 let stickBottom=true;
 function autoScroll(){const m=$('#main');if(stickBottom)m.scrollTop=m.scrollHeight}
+/* When an answer is done, start the reader at it: the first text after the last reasoning or tool step (the Assessment),
+   with the technician's message just above it when that fits on screen. Left alone if the technician scrolled away. */
+function scrollToAnswer(wrap){
+  const m=$('#main'),kids=[...wrap.children];let last=-1;
+  kids.forEach((k,i)=>{if(k.matches('.tool,.think,.tooldetail,.deferralcard,.partcard'))last=i});
+  const target=kids.slice(last+1).find(k=>k.classList.contains('aitext'))||[...wrap.querySelectorAll('.aitext')].pop();if(!target)return;
+  let user=wrap.previousElementSibling;while(user&&!user.classList.contains('msg'))user=user.previousElementSibling;
+  const mr=m.getBoundingClientRect(),y=el=>m.scrollTop+el.getBoundingClientRect().top-mr.top-10;
+  let top=y(target);
+  if(user&&user.classList.contains('user')&&last<0){const uy=y(user);if(top-uy<m.clientHeight*0.35)top=uy}
+  m.scrollTo({top:Math.max(0,top),behavior:'smooth'})}
 $('#main').addEventListener('scroll',()=>{const m=$('#main');stickBottom=m.scrollHeight-m.scrollTop-m.clientHeight<120});
 
 function renderCase(){
