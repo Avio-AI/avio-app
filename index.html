@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="fa4eb27 2026-11-13">
+<meta name="avio-build" content="abaeb78 2026-11-13">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -205,6 +205,20 @@ mark{background:var(--mark-bg);color:var(--amber-glow);border-radius:2px}
 #modal.helpfull{padding:0}#modal.helpfull .sheet{max-width:none;width:100%;height:var(--app-h,100dvh);max-height:var(--app-h,100dvh);border-radius:0;padding-top:var(--safe-t)}
 #modal.helpfull .sheet:before{display:none}#modal.helpfull .helpframe{height:calc(var(--app-h,100dvh) - 150px - var(--safe-t) - var(--safe-b))}
 .bad{outline:2px solid #b3261e;outline-offset:1px}
+.docscase{margin:0 2px 10px}
+.docsec{background:var(--panel);border:1px solid var(--border);border-radius:16px;margin:0 0 10px;overflow:hidden}
+.docsec>summary{list-style:none;display:flex;align-items:center;gap:10px;padding:14px 16px;cursor:pointer;font-weight:700;font-size:16px}
+.docsec>summary::-webkit-details-marker{display:none}
+.docsec>summary .ms{color:var(--amber)}
+.docsec>summary .dst{flex:1}
+.docsec>summary .dsn{font-size:12px;font-weight:700;color:var(--text-dim);background:var(--panel2);border-radius:10px;padding:2px 8px}
+.docsec>summary .dsn:empty{display:none}
+.docsec>summary::after{content:'expand_more';font-family:'Material Symbols Rounded';font-size:22px;color:var(--text-dim);transition:transform .2s}
+.docsec[open]>summary::after{transform:rotate(180deg)}
+.docsec .dsbody{padding:0 14px 14px}
+.docsec #melPane>.card{margin:0}
+.docsec #melPane>.card>h3{display:none}
+.docsec .dsgo{display:block;margin-top:4px;color:var(--amber);font-weight:700;font-size:14px}
 .caselock{display:flex;gap:10px;align-items:flex-start;margin:8px 12px;padding:10px 12px;border-radius:12px;background:var(--panel2);border:1px solid var(--amber);font-size:14px;line-height:1.35}
 .caselock .ms{color:var(--amber)}
 .savewarn.info{background:var(--amber);color:#1a1200}
@@ -678,7 +692,7 @@ try{if(sessionStorage.getItem('avio_splash'))document.getElementById('splash').r
     <section class="view" id="intakeView">
       <div class="tabs">
         <button class="tab on" data-tab="describe"><span class="pill"><span class="ms">edit_note</span></span>Describe</button>
-        <button class="tab" data-tab="mel"><span class="pill"><span class="ms">fact_check</span></span>MEL</button>
+        <button class="tab" data-tab="docs"><span class="pill"><span class="ms">description</span></span>Docs</button>
         <button class="tab" data-tab="checks"><span class="pill"><span class="ms">checklist</span></span>PFI</button>
         <button class="tab" data-tab="search"><span class="pill"><span class="ms">search</span></span>Search</button>
         <!-- Wiring lives inside the Search tab (Manuals / Wiring switch); this button is never shown -->
@@ -765,8 +779,14 @@ try{if(sessionStorage.getItem('avio_splash'))document.getElementById('splash').r
         <div class="disclaimer" id="mainDisclaimer">Troubleshooting aid only. It reasons from the maintenance data your organization connected to this app and cites pages. The current revision of the approved maintenance data governs all maintenance and return-to-service decisions.</div>
       </div>
 
+      <!-- DOCS: the case's paperwork, in the order it is usually done -->
+      <div id="docsPane" class="hidden">
+        <div class="hint docscase" id="docsCase"></div>
+        <details class="docsec" data-sec="parts"><summary><span class="ms">swap_horiz</span><span class="dst">Component Transactions</span><span class="dsn" id="dsPartsN"></span></summary><div class="dsbody" id="dsParts"></div></details>
+        <details class="docsec" data-sec="amdl" id="dsAmdlSec"><summary><span class="ms">assignment</span><span class="dst" id="dsAmdlT">Discrepancy Log</span><span class="dsn" id="dsAmdlN"></span></summary><div class="dsbody" id="dsAmdl"></div></details>
+        <details class="docsec" data-sec="mel"><summary><span class="ms">fact_check</span><span class="dst">MEL</span><span class="dsn" id="dsMelN"></span></summary><div class="dsbody" id="dsMel">
       <!-- MEL DISPATCH RELIEF -->
-      <div id="melPane" class="hidden">
+      <div id="melPane">
         <div class="card">
           <h3>MEL Dispatch Relief</h3>
           <div class="ac">
@@ -780,6 +800,10 @@ try{if(sessionStorage.getItem('avio_splash'))document.getElementById('splash').r
           <button class="btn2 small hidden" id="melAmdlBlank" style="margin-top:10px">Discrepancy-Only Log Entry (No Deferral)</button>
         </div>
         <div id="melResults"></div>
+      </div>
+        </div></details>
+        <details class="docsec" data-sec="log"><summary><span class="ms">edit_document</span><span class="dst">Log Entry</span><span class="dsn" id="dsLogN"></span></summary><div class="dsbody" id="dsLog"></div></details>
+        <details class="docsec" data-sec="tag" id="dsTagSec"><summary><span class="ms">sell</span><span class="dst" id="dsTagT">Repair Tag</span><span class="dsn" id="dsTagN"></span></summary><div class="dsbody" id="dsTag"></div></details>
       </div>
 
       <!-- CHECKLISTS (from the data set's checklists.json) -->
@@ -3014,8 +3038,8 @@ $$('.tab').forEach(t=>t.onclick=()=>{
   if(t.dataset.tab==='search'&&!t.dataset.direct&&store.get('srcSub','search')==='wiring'&&curTab!=='search'){document.querySelector('.tab[data-tab=wiring]').click();return}
   curTab=t.dataset.tab;const st=curTab==='wiring'?document.querySelector('.tab[data-tab=search]'):t;$$('.tab').forEach(x=>x.classList.toggle('on',x===st));
   if(curTab==='search'||curTab==='wiring')store.set('srcSub',curTab);
-  $('#caseForm').classList.toggle('hidden',curTab==='search'||curTab==='wiring'||curTab==='mel'||curTab==='checks');$('#searchPane').classList.toggle('hidden',curTab!=='search');$('#wiringPane').classList.toggle('hidden',curTab!=='wiring');$('#melPane').classList.toggle('hidden',curTab!=='mel');$('#checkPane').classList.toggle('hidden',curTab!=='checks');
-  if(curTab==='mel')initMelPane();if(curTab==='checks')initCheckPane();
+  $('#caseForm').classList.toggle('hidden',curTab==='search'||curTab==='wiring'||curTab==='docs'||curTab==='checks');$('#searchPane').classList.toggle('hidden',curTab!=='search');$('#wiringPane').classList.toggle('hidden',curTab!=='wiring');$('#docsPane').classList.toggle('hidden',curTab!=='docs');$('#checkPane').classList.toggle('hidden',curTab!=='checks');
+  if(curTab==='docs')renderDocs();if(curTab==='checks')initCheckPane();
   const ord={describe:['#dNoData','#faultCard','#cmcCard','#describeCard']}[curTab];
   if(ord){const order=ord;const cf=$('#caseForm');for(const id of order.slice().reverse())cf.prepend($(id))}
   if(curTab==='fault')$('#faultInput').focus();
@@ -3813,6 +3837,7 @@ function openPart(id,focus){
   if(RT)$('#leTagGo').onclick=()=>outBtn('leTagGo','leTagOut','Create '+(RT.title||'Repair Tag'),()=>buildRepairTag(p,{tech:g('leTech'),cert:g('leCert'),sig:SG2.get(),
     ratings:Object.fromEntries(['ratingAP','ratingCRS','ratingMil','ratingFNAA'].map(k=>[k,c('leRt_'+k)]))}));
   if(focus==='tag')setTimeout(()=>{const d=$('#leTagBox');if(d)d.scrollIntoView({block:'start'})},60);
+  if(focus==='log')setTimeout(()=>{const d=$('#leTech')||$('#leGo');if(d)d.scrollIntoView({block:'center'})},60);
 }
 const LE_SCAN_SYS=`You read aviation airworthiness release certificates from a photo: FAA Form 8130-3, Transport Canada Form One (24-0078), EASA Form 1, or a similar authorized release certificate. Return ONLY a JSON object, no prose, with these string keys:
 form ("FAA 8130-3", "TCCA Form One", "EASA Form 1", or "Other: <name>"), tracking_no (block 3 form tracking number), organization (block 4, name and city only), work_order (block 5), description (block 7), part_number (block 8), quantity (block 9), serial_number (block 10), status (block 11 exactly as printed, e.g. NEW, OVERHAULED, REPAIRED, INSPECTED/TESTED, MODIFIED), remarks (block 12, verbatim but at most 300 characters), date (block 14e or the release date, as "D MMM YYYY" with the month in capitals, e.g. "21 OCT 2026"), tsn_hours, tsn_cycles, tso_hours, tso_cycles (only if printed in the remarks), legible ("yes", or a list of the blocks you could not read).
@@ -4135,7 +4160,7 @@ function openCaseAmdl(){
 }
 async function showIntakeMel(g){
   if(typeof showIntake==='function')showIntake();
-  const t=document.querySelector('.tab[data-tab=mel]');if(t)t.click();await loadMel();$('#melInput').value=melTitle(g);renderMelItem(g);
+  openDocs('mel');await loadMel();$('#melInput').value=melTitle(g);renderMelItem(g);
 }
 function melTitle(g){return g.kind==='cas'?g.name:(g.item+(g.sub?' — '+g.sub:''))}
 function melRef(g){return g.kind==='cas'?'MMEL Section 2 · CAS message relief':`MMEL ${g.ata}-${g.seq}${g.sub?' · sub-item '+g.k.split('-').slice(2).join('-'):''} · ${tc(g.sys)}`}
@@ -4238,6 +4263,64 @@ function renderMelAc(){
   $$('#melList .acitem').forEach(el=>el.onmousedown=e=>{e.preventDefault();if(el.dataset.none)return;pickMel(melItems[+el.dataset.i])});
 }
 function pickMel(g){if(!g)return;$('#melInput').value=melTitle(g);melIdx=-1;$('#melList').classList.add('hidden');$('#melInput').blur();renderMelItem(g)}
+/* ═════════ DOCS TAB ═════════
+   One place for the case's paperwork, in working order: component transactions (every remove-and-replace in the case),
+   the operator's discrepancy log, MEL relief, the log entry for each transaction and the operator's repair tag for each removed
+   part. Section titles for the operator's forms come from operator.json (forms.<id>.short, else title). */
+const DOCS_OPEN_KEY='avio_docs_open';
+function docsForm(){   // the operator's discrepancy log: the current rule's, else the first rule that has one
+  const f=amdlForm();if(f)return {f,rule:null};
+  for(const [k,v] of Object.entries(typeof MEL_OPS!=='undefined'?MEL_OPS:{}))if(v.form&&OPERATOR&&OPERATOR.forms&&OPERATOR.forms[v.form])return {f:OPERATOR.forms[v.form],rule:k};
+  return null}
+const formShort=f=>(f&&(f.short||f.title))||'';
+function openDocs(sec){const t=document.querySelector('.tab[data-tab=docs]');if(curTab!=='docs'&&t)t.click();else renderDocs();
+  if(sec){const d=document.querySelector(`.docsec[data-sec="${sec}"]`);if(d){d.open=true;docsSaveOpen();setTimeout(()=>d.scrollIntoView({block:'start',behavior:'smooth'}),50)}}}
+function docsSaveOpen(){store.set(DOCS_OPEN_KEY,$$('.docsec').filter(d=>d.open).map(d=>d.dataset.sec))}
+function partLine(p){return [p.off&&p.off.pn&&'Off '+p.off.pn+(p.off.sn?' S/N '+p.off.sn:''),p.on&&p.on.pn&&'On '+p.on.pn+(p.on.sn?' S/N '+p.on.sn:'')].filter(Boolean).join(' · ')||'No part numbers yet'}
+function renderDocs(){
+  if(!renderDocs.init){renderDocs.init=true;const open=store.get(DOCS_OPEN_KEY,['parts']);
+    $$('.docsec').forEach(d=>{d.open=open.includes(d.dataset.sec);d.addEventListener('toggle',()=>{docsSaveOpen();if(d.open&&d.dataset.sec==='mel')initMelPane()})})}
+  const c=CASE,L=c?leParts():[],RT=leTag(),DF=docsForm();
+  $('#docsCase').innerHTML=c?`Case: <b>${esc(c.title||'Untitled')}</b>${c.form&&c.form.reg?' · '+esc(c.form.reg):''}${c.form&&c.form.sn?' · S/N '+esc(c.form.sn):''}`:
+    'No case open. Component transactions, log entries and repair tags belong to a case: open one from Recent Cases, start one on Describe, or start a paperwork-only case below.';
+  // 1. component transactions
+  $('#dsPartsN').textContent=L.length?String(L.length):'';
+  $('#dsParts').innerHTML=!c?`<div class="grid2"><div class="field"><label>Tail Number</label><input id="dsReg" autocomplete="off" autocapitalize="characters" style="text-transform:uppercase" value="${esc(($('#fReg')||{}).value||'')}"></div>
+      <div class="field"><label>Serial Number</label><input id="dsSn" autocomplete="off" inputmode="numeric" value="${esc(($('#fSn')||{}).value||'')}"></div></div>
+      <button class="btn" id="dsNewCase" style="width:100%">Start a Paperwork Case</button><div class="hint">For paperwork only: no AI, no troubleshooting. You can still talk to the assistant in it later.</div>`:
+    (L.length?L.map((p,i)=>`<div class="res dspart" data-id="${p.id}"><div class="h"><span class="mt">${i+1} · ${esc(LE_CAT[p.cat]||'')}</span><span class="ttl">${esc(p.name||'Component')}</span></div>
+      <div class="lb">${esc(partLine(p))}</div><div class="sn">${esc(dmyStr(p.inst)||'')}${p.cert&&p.cert.trk?' · '+esc((p.cert.form||'')+' '+p.cert.trk):''}${p.pos?' · '+esc(p.pos):''}</div></div>`).join(''):'<div class="hint" style="margin:4px 0 10px">No component transactions in this case yet. Add one for each part removed and replaced, or tell the assistant and it records them.</div>')+
+    `<button class="btn" id="dsAddPart" style="width:100%;margin-top:6px"><span class="ms">add</span> Add Component Transaction</button>`;
+  // 2. discrepancy log
+  $('#dsAmdlSec').classList.toggle('hidden',!DF);
+  if(DF){const t=formShort(DF.f);$('#dsAmdlT').textContent=t;const a=c&&c.amdl;$('#dsAmdlN').textContent=a&&(a.logNo||a.disc)?'Saved':'';
+    $('#dsAmdl').innerHTML=(DF.rule?`<div class="hint">Your operating rule on MEL (${esc(melOps().label)}) has no ${esc(t)}. Opening it switches to ${esc(MEL_OPS[DF.rule].label)}.</div>`:'')+
+      (c?`<div class="kv">${c.deferral?`MEL deferral recorded in this case: the ${esc(t)} opens with the MEL section filled in.`:'No MEL deferral in this case: the '+esc(t)+' opens for the discrepancy only.'}${c.clearing?' Corrective action recorded.':''}</div>
+        <button class="btn" id="dsAmdlCase" style="width:100%;margin-top:8px">Open ${esc(t)} for This Case</button>`:
+        `<button class="btn" id="dsAmdlBlank" style="width:100%">${esc(t)}: Discrepancy Only</button>`)}
+  // 3. MEL: the MEL pane itself (initialized when opened)
+  $('#dsMelN').textContent=c&&c.deferral?'Deferred':'';
+  // 4. log entry and 5. repair tag: one per transaction
+  const per=(kind,btn)=>!c?'<div class="hint">Open a case first.</div>':!L.length?`<div class="hint">Add a component transaction first; each one gets its own ${kind==='tag'?esc(formShort(RT)):'log entry'}.</div>`:
+    L.map((p,i)=>`<div class="res dsdoc" data-id="${p.id}" data-k="${kind}"><div class="h"><span class="mt">${i+1}</span><span class="ttl">${esc(p.name||'Component')}</span></div><div class="lb">${esc(partLine(p))}</div>
+      <span class="dsgo">${btn} ›</span></div>`).join('');
+  $('#dsLogN').textContent=c&&L.length?String(L.length):'';$('#dsLog').innerHTML=per('log','Open Log Entry');
+  $('#dsTagSec').classList.toggle('hidden',!RT);
+  if(RT){$('#dsTagT').textContent=formShort(RT)||'Repair Tag';$('#dsTagN').textContent=c&&L.length?String(L.length):'';$('#dsTag').innerHTML=per('tag','Open '+(formShort(RT)||'Repair Tag'))}
+  // actions
+  const nb=$('#dsNewCase');if(nb)nb.onclick=()=>{const reg=$('#dsReg').value.trim().toUpperCase(),sn=$('#dsSn').value.trim();
+    if(!reg){$('#dsReg').focus();flash(nb,'ENTER THE TAIL NUMBER');return}
+    if($('#fReg'))$('#fReg').value=reg;if($('#fSn'))$('#fSn').value=sn;const f=collectForm();f.reg=reg;f.sn=sn;
+    CASE={id:Date.now().toString(36),title:`Paperwork · ${reg} · ${dmy(new Date())}`,created:Date.now(),updated:Date.now(),form:f,usage:{in:0,out:0},msgs:[]};CASE.autoTitle=CASE.title;
+    saveCase();renderDocs()};
+  const ap=$('#dsAddPart');if(ap)ap.onclick=()=>{const p=leNewPart({});leParts().push(p);saveCase();openPart(p.id)};
+  $$('#dsParts .dspart').forEach(el=>el.onclick=()=>openPart(el.dataset.id));
+  $$('#docsPane .dsdoc').forEach(el=>el.onclick=()=>openPart(el.dataset.id,el.dataset.k));
+  const ac=$('#dsAmdlCase');if(ac)ac.onclick=()=>{docsUseFormRule(DF);openCaseAmdl()};
+  const ab=$('#dsAmdlBlank');if(ab)ab.onclick=()=>{docsUseFormRule(DF);openAmdl({disc:caseDiscrepancy()})};
+  if($('.docsec[data-sec="mel"]').open)initMelPane();
+}
+function docsUseFormRule(DF){if(DF&&DF.rule){cfg.melOps=DF.rule;saveCfg();const s=$('#melOps');if(s&&s.options.length)s.value=DF.rule;melAmdlBtn()}}
 async function initMelPane(){
   const sel=$('#melOps');if(!sel.options.length)sel.innerHTML=Object.entries(MEL_OPS).map(([k,v])=>`<option value="${k}" ${k===(cfg.melOps||'91-d195')?'selected':''}>${esc(v.label)}</option>`).join('');
   if(!$('#melDate').value)$('#melDate').value=dmy(new Date());
@@ -5384,7 +5467,7 @@ setTimeout(()=>{if(BOOT.done)return;console.warn('start-up stalled at',BOOT.step
     const idle=!CASE&&!BUSY&&curTab==='describe'&&$('#modal').classList.contains('hidden')&&!(document.activeElement&&document.activeElement.matches&&document.activeElement.matches('input,textarea,select'));
     if(idle)await apply();else notice('New data is available for this aircraft. Tap to load it.',()=>apply().catch(e=>console.warn(e)))},1500);
   if(!DATA.ready){const e=$('#badges').dataset.err;if(e)openSettings('Could not load your data: '+e);return}
-  if(FC&&FC.mode==='mel'){const mi=$('#melInput');if(mi)mi.placeholder='Inoperative item or CAS message, e.g. Pack, Weather Radar, 21-1';const t=document.querySelector('.tab[data-tab=mel]');if(t)t.click();return}
+  if(FC&&FC.mode==='mel'){const mi=$('#melInput');if(mi)mi.placeholder='Inoperative item or CAS message, e.g. Pack, Weather Radar, 21-1';openDocs('mel');return}
   const cur=store.get(PFX+'_current',null);
   if(cur){const c=loadCases().find(x=>x.id===cur);if(c){CASE=c;showChat();renderCase()}}
 })().finally(()=>{BOOT.done=true;hideSplash()});
