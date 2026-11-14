@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="eaa1583 2026-11-14">
+<meta name="avio-build" content="17b9b64 2026-11-14">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -139,6 +139,16 @@ main,.view,.sheet,.sheetbd{min-width:0;max-width:100%;overflow-x:hidden}
 .tool .tx{flex:1;min-width:0;overflow-wrap:anywhere} .tool .rs{color:var(--green);flex:0 1 auto;min-width:0;max-width:45%;text-align:right;overflow-wrap:anywhere}
 .tooldetail{overflow-wrap:anywhere;font-family:var(--mono);font-size:12px;white-space:pre-wrap;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px;max-height:260px;overflow:auto;margin:-2px 0 6px;color:var(--text-dim)}
 details.think{margin:4px 0 8px}
+details.process{margin:2px 0 10px;border:1px solid var(--border);border-radius:12px;background:var(--panel)}
+details.process>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:9px 12px;font-size:13px;color:var(--text-dim);user-select:none}
+details.process>summary::-webkit-details-marker{display:none}
+details.process>summary .pic{color:var(--cyan);font-size:14px}
+details.process.live>summary .pic{color:var(--amber);animation:pulse 1s infinite}
+details.process>summary .ptx{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+details.process>summary .pch{font-family:'Material Symbols Rounded';font-size:20px;line-height:1;transition:transform .15s}
+details.process[open]>summary .pch{transform:rotate(180deg)}
+details.process>.pbody{padding:0 10px 8px;border-top:1px solid var(--border)}
+details.process>.pbody .aitext{font-size:13.5px;color:var(--text-dim)}
 details.think summary{font-family:var(--mono);font-size:12px;color:var(--magenta);cursor:pointer;letter-spacing:1px}
 details.think div{font-size:13px;color:var(--text-dim);white-space:pre-wrap;line-height:1.45;margin-top:6px;max-height:300px;overflow:auto;border-left:2px solid var(--think-border);padding-left:8px}
 .usage{font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-top:8px;text-align:right}
@@ -2303,30 +2313,46 @@ function toolEl(b,result){
   if(result)el._result=result.data;
   return el;
 }
+/* The reasoning and the manual look-ups of an answer sit in one box, closed by default, so the technician sees the answer
+   and can open the box to watch the steps live. Text written between steps goes in the box too; the final answer and the
+   deferral / part cards stay outside it. */
+function procBox(){const d=document.createElement('details');d.className='process';
+  d.innerHTML='<summary><span class="pic">◈</span><span class="ptx"></span><span class="ms pch">expand_more</span></summary><div class="pbody"></div>';return d}
+function procSummary(box,live,cur){const b=box.querySelector('.pbody'),n=b.querySelectorAll(':scope>.tool,:scope>.think').length;
+  box.classList.toggle('live',!!live);box.querySelector('.ptx').textContent=`Reasoning · ${n} step${n===1?'':'s'}`+(live&&cur?` · ${cur}`:'')}
+function placeCard(wrap,c){const ref=[...wrap.children].find(k=>k.matches('.aitext,.typing,.usage,.errbox'));wrap.insertBefore(c,ref||null)}
+function groupProcess(wrap){const kids=[...wrap.children];let last=-1;kids.forEach((k,i)=>{if(k.matches('.tool,.think'))last=i});if(last<0)return;
+  const box=procBox(),body=box.querySelector('.pbody');wrap.insertBefore(box,kids[0]);
+  kids.slice(0,last+1).forEach(k=>{if(k.matches('.deferralslot,.deferralcard,.partcard'))return;body.appendChild(k)});
+  const td=kids[last+1];if(td&&td.classList.contains('tooldetail'))body.appendChild(td);procSummary(box,false)}
 function newAiBubble(){
   const log=$('#chatLog');const wrap=document.createElement('div');wrap.className='msg ai';log.appendChild(wrap);
   const typing=document.createElement('div');typing.className='typing';typing.innerHTML='<span></span><span></span><span></span>';wrap.appendChild(typing);
-  const els={};let raf=null;const pendingText=new Set();
+  const els={};let raf=null;const pendingText=new Set();let box=null;
+  // the box goes first in the bubble; any text written before this step was working notes, so it moves in too
+  const proc=()=>{if(!box){box=procBox();wrap.insertBefore(box,wrap.firstChild)}const body=box.querySelector('.pbody');
+    [...wrap.children].forEach(k=>{if(k.classList.contains('aitext'))body.appendChild(k)});return body};
   const flush=()=>{raf=null;for(const b of pendingText){els[b._k].innerHTML=md(b.text)}pendingText.clear();autoScroll()};
   let turn=0;
   const api={
     handlers(){turn++;const T=turn;return{
       start(b,idx){typing.remove();b._k=T+':'+idx;
         if(b.type==='text'){const d=document.createElement('div');d.className='aitext';wrap.appendChild(d);els[b._k]=d}
-        else if(b.type==='thinking'){const d=document.createElement('details');d.className='think';d.innerHTML='<summary>◈ REASONING</summary><div></div>';wrap.appendChild(d);els[b._k]=d.querySelector('div')}
-        else if(b.type==='tool_use'){const t=toolEl(b);wrap.appendChild(t);els[b._k]=t;els['tool:'+b.id]=t}
+        else{const body=proc();
+          if(b.type==='thinking'){const d=document.createElement('details');d.className='think';d.innerHTML='<summary>◈ REASONING</summary><div></div>';body.appendChild(d);els[b._k]=d.querySelector('div');procSummary(box,true,'thinking')}
+          else if(b.type==='tool_use'){const t=toolEl(b);body.appendChild(t);els[b._k]=t;els['tool:'+b.id]=t;procSummary(box,true,toolLabel(b))}}
         wrap.appendChild(typing);autoScroll()},
       text(b){pendingText.add(b);if(!raf)raf=requestAnimationFrame(flush)},
       thinking(b){els[b._k].textContent=b.thinking},
-      toolready(b){const t=els['tool:'+b.id];if(t)t.querySelector('.tx').textContent=toolLabel(b)}
+      toolready(b){const t=els['tool:'+b.id];if(t)t.querySelector('.tx').textContent=toolLabel(b);if(box)procSummary(box,true,toolLabel(b))}
     }},
     toolDone(id,r){const t=els['tool:'+id];if(!t)return;t.classList.remove('run');if(r.error)t.classList.add('err');t.querySelector('.ic').textContent=r.error?'✖':'◆';t.querySelector('.rs').textContent=r.summary||'';t._result=r.data;
-      if(!r.error&&r.data&&r.data.recorded){const c=deferralCard();if(c){$$('#chatLog .deferralcard').forEach(x=>x.remove());t.after(c)}}
-      if(!r.error&&r.data&&r.data.part_id&&typeof partCard==='function'){$$('#chatLog .partcard').forEach(x=>{if(x.dataset.part===r.data.part_id)x.remove()});const pc=partCard(r.data.part_id);if(pc)t.after(pc)}},
+      if(!r.error&&r.data&&r.data.recorded){const c=deferralCard();if(c){$$('#chatLog .deferralcard').forEach(x=>x.remove());placeCard(wrap,c)}}
+      if(!r.error&&r.data&&r.data.part_id&&typeof partCard==='function'){$$('#chatLog .partcard').forEach(x=>{if(x.dataset.part===r.data.part_id)x.remove()});const pc=partCard(r.data.part_id);if(pc)placeCard(wrap,pc)}},
     resetPending(){},
-    finish(u){typing.remove();flush();const d=document.createElement('div');d.className='usage';d.textContent=`case tokens · in ${fmtK(u.in)} · out ${fmtK(u.out)} · ${cfg.model}`;wrap.appendChild(d);autoScroll();
+    finish(u){typing.remove();flush();if(box)procSummary(box,false);const d=document.createElement('div');d.className='usage';d.textContent=`case tokens · in ${fmtK(u.in)} · out ${fmtK(u.out)} · ${cfg.model}`;wrap.appendChild(d);autoScroll();
       if(stickBottom)setTimeout(()=>{if(wrap.isConnected)scrollToAnswer(wrap)},80)},
-    error(msg){typing.remove();flush();const d=document.createElement('div');d.className='errbox';d.textContent=msg;wrap.appendChild(d);autoScroll()}
+    error(msg){typing.remove();flush();if(box)procSummary(box,false);const d=document.createElement('div');d.className='errbox';d.textContent=msg;wrap.appendChild(d);autoScroll()}
   };
   return api;
 }
@@ -2337,7 +2363,7 @@ function autoScroll(){const m=$('#main');if(stickBottom)m.scrollTop=m.scrollHeig
    with the technician's message just above it when that fits on screen. Left alone if the technician scrolled away. */
 function scrollToAnswer(wrap){
   const m=$('#main'),kids=[...wrap.children];let last=-1;
-  kids.forEach((k,i)=>{if(k.matches('.tool,.think,.tooldetail,.deferralcard,.partcard'))last=i});
+  kids.forEach((k,i)=>{if(k.matches('.process,.tool,.think,.tooldetail,.deferralcard,.partcard'))last=i});
   const target=kids.slice(last+1).find(k=>k.classList.contains('aitext'))||[...wrap.querySelectorAll('.aitext')].pop();if(!target)return;
   let user=wrap.previousElementSibling;while(user&&!user.classList.contains('msg'))user=user.previousElementSibling;
   const mr=m.getBoundingClientRect(),y=el=>m.scrollTop+el.getBoundingClientRect().top-mr.top-10;
@@ -2373,6 +2399,7 @@ function renderCase(){
       }
     }
   }
+  $$('#chatLog .msg.ai').forEach(groupProcess);
   $('#caseTitle').textContent=CASE.title?' · '+CASE.title:'';
   renderBriefBar();
   {const w=$('#wSn');if(w)w.value=(CASE.form&&CASE.form.sn)||''}useWiringFor((CASE.form&&CASE.form.sn)||'').catch(()=>{});
