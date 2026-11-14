@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="757bf10 2026-11-14">
+<meta name="avio-build" content="a90a175 2026-11-14">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -139,6 +139,8 @@ main,.view,.sheet,.sheetbd{min-width:0;max-width:100%;overflow-x:hidden}
 .tool .tx{flex:1;min-width:0;overflow-wrap:anywhere} .tool .rs{color:var(--green);flex:0 1 auto;min-width:0;max-width:45%;text-align:right;overflow-wrap:anywhere}
 .tooldetail{overflow-wrap:anywhere;font-family:var(--mono);font-size:12px;white-space:pre-wrap;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px;max-height:260px;overflow:auto;margin:-2px 0 6px;color:var(--text-dim)}
 details.think{margin:4px 0 8px}
+@keyframes flashfld{0%{box-shadow:0 0 0 3px var(--cyan)}100%{box-shadow:0 0 0 0 transparent}}
+input.flash{animation:flashfld 1.6s ease-out}
 details.process{margin:2px 0 10px;border:1px solid var(--border);border-radius:12px;background:var(--panel)}
 details.process>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:9px 12px;font-size:13px;color:var(--text-dim);user-select:none}
 details.process>summary::-webkit-details-marker{display:none}
@@ -3708,23 +3710,38 @@ function leNewPart(o){o=o||{};
     offLife:{},rts:{cat:o.cat||'airframe',op:leRtsDefault()},tag:{}}}
 function leParts(){if(!CASE)return [];if(!Array.isArray(CASE.parts))CASE.parts=[];return CASE.parts}
 function lePart(id){return leParts().find(p=>p.id===id)||null}
-// the assistant reported a remove-and-replace: add it, or fill in the matching one (same S/N, or same P/N without a S/N)
+// the assistant reported a remove-and-replace: add it, or update the one it names (part_id) or matches (same S/N, or same
+// P/N without a S/N). P/N and S/N the assistant sends replace what was there, so a correction in the chat reaches the
+// log entry, the repair tag and the discrepancy log; the other fields are only filled when empty (the technician may have edited them).
+const LE_PN_KEYS=[['off','pn','P/N off'],['off','sn','S/N off'],['on','pn','P/N on'],['on','sn','S/N on']];
 function leUpsert(i){
   const L=leParts();const k=s=>String(s||'').replace(/\s+/g,'').toUpperCase();
-  let p=L.find(x=>(i.sn_off&&k(x.off.sn)===k(i.sn_off))||(i.sn_on&&k(x.on.sn)===k(i.sn_on))||(i.pn_off&&k(x.off.pn)===k(i.pn_off)&&!x.off.sn)||(i.pn_on&&k(x.on.pn)===k(i.pn_on)&&!x.on.sn));
-  if(!p){p=leNewPart(i);L.push(p)}
+  let p=(i.part_id&&L.find(x=>x.id===i.part_id))||L.find(x=>(i.sn_off&&k(x.off.sn)===k(i.sn_off))||(i.sn_on&&k(x.on.sn)===k(i.sn_on))||(i.pn_off&&k(x.off.pn)===k(i.pn_off)&&!x.off.sn)||(i.pn_on&&k(x.on.pn)===k(i.pn_on)&&!x.on.sn));
+  const isNew=!p;if(!p){p=leNewPart(i);L.push(p)}
   const set=(o,key,v)=>{v=String(v||'').trim();if(v&&!o[key])o[key]=v};
-  set(p.off,'pn',i.pn_off);set(p.off,'sn',i.sn_off);set(p.on,'pn',i.pn_on);set(p.on,'sn',i.sn_on);
+  const changed=[];
+  for(const [side,key,label] of LE_PN_KEYS){const v=String(i[key+'_'+side]||'').trim();if(v&&k(v)!==k(p[side][key])){if(p[side][key]&&!isNew)changed.push(`${label} ${p[side][key]} → ${v}`);p[side][key]=v}}
+  p._changed=changed;
   set(p,'name',i.part_name);set(p,'task',i.amm_task);set(p,'reason',i.reason_removed);set(p,'desc',i.description);
   if(i.category&&LE_CAT[i.category]&&!p.catSet){p.cat=i.category;p.rts.cat=i.category}
   if(i.engine_position&&!p.pos)p.pos=String(i.engine_position).replace(/\D/g,'').slice(0,1);
-  p.upd=Date.now();saveCase();return p;
+  p.upd=Date.now();leToAmdl(p);saveCase();if(typeof refreshPartCards==='function')refreshPartCards();leLive(p);return p;
+}
+// a Log Entry / repair tag editor or a case discrepancy log open on screen picks up the new numbers at once
+let LE_OPEN=null,AMDL_OPEN=false;
+function leLive(p){
+  const put=(id,v)=>{const e=$('#'+id);if(!e||e.value===v)return null;e.value=v;e.classList.remove('flash');void e.offsetWidth;e.classList.add('flash');return e};
+  if(LE_OPEN===p.id&&$('#leWrap')){let last=null;for(const [side,key] of LE_PN_KEYS){const e=put('le'+(side==='off'?'Off':'On')+(key==='pn'?'Pn':'Sn'),p[side][key]||'');if(e)last=e}
+    if(last)last.dispatchEvent(new Event('input',{bubbles:true}))}
+  if(AMDL_OPEN&&$('#amPnOff')&&amdlPart()===p){let last=null;for(const [k,a,b] of AMDL_PN){const e=put(AMDL_IDS[k],p[a][b]||'');if(e)last=e}
+    if(last)last.dispatchEvent(new Event('input',{bubbles:true}))}
 }
 // AI tool: a component was removed and replaced (whether or not it fixed the fault)
-const LE_TOOL={name:'record_component_change',description:"Record a component transaction (a part removed and a replacement installed) as soon as the technician reports it, whether or not it fixed the fault and even while the case stays open. The app prepares the component log entry (removed / installed P/N and S/N, reason removed, installed part times from the replacement part's release certificate) and, when the operator has one set up, the repair tag for the removed part, and offers them to the technician. Use the technician's facts only: never invent part numbers, serial numbers or times. Call it again for each additional part changed.",
+const LE_TOOL={name:'record_component_change',description:"Record a component transaction (a part removed and a replacement installed) as soon as the technician reports it, whether or not it fixed the fault and even while the case stays open. The app prepares the component log entry (removed / installed P/N and S/N, reason removed, installed part times from the replacement part's release certificate) and, when the operator has one set up, the repair tag for the removed part, and offers them to the technician. Use the technician's facts only: never invent part numbers, serial numbers or times. Call it again for each additional part changed. When the technician corrects a P/N or S/N already recorded, call it again with that transaction's part_id and the corrected values: the app updates the log entry, repair tag and discrepancy log.",
   input_schema:{type:'object',properties:{part_name:{type:'string',description:'Component name as the parts catalog / maintenance manual names it'},
     category:{type:'string',enum:['airframe','engine','apu'],description:'airframe for airframe systems; engine for engine and engine-mounted components; apu for the APU and APU-mounted components'},
     engine_position:{type:'string',description:'"1" (left) or "2" (right) for engine components'},
+    part_id:{type:'string',description:'To correct or complete a transaction already recorded in this case, its part_id from the earlier result. The P/N and S/N you send replace the recorded ones.'},
     pn_off:{type:'string'},sn_off:{type:'string'},pn_on:{type:'string'},sn_on:{type:'string'},
     reason_removed:{type:'string',description:'Short reason, e.g. "INOPERATIVE" or "TIME CHANGE"'},
     amm_task:{type:'string',description:'Task number / position for the log: the removal / installation task number copied exactly as the manual prints it (do not add or remove hyphens or dots). If the procedure has no task number, give the section reference as printed and/or the position (LH, RH, NO. 1).'},
@@ -3736,13 +3753,14 @@ TOOL_LABEL.record_component_change=i=>`Component change: ${i.part_name||''}`;
     if(!CASE)return {summary:'no case',error:true,data:{error:'No open case.'}};
     const p=leUpsert(input||{});
     const miss=[!p.off.pn&&'P/N off',!p.off.sn&&'S/N off',!p.on.pn&&'P/N on',!p.on.sn&&'S/N on',!p.reason&&'reason removed'].filter(Boolean);
-    return {summary:`${(p.name||'component').slice(0,40)} logged`,data:{recorded:true,part_id:p.id,
+    const fix=p._changed||[];delete p._changed;
+    return {summary:fix.length?`${(p.name||'component').slice(0,30)} corrected`:`${(p.name||'component').slice(0,40)} logged`,data:{recorded:true,part_id:p.id,corrected:fix.length?fix:undefined,
       paperwork:`Component Log Entry${leTag()?' and '+leTagTitle():''} are ready under this message and in Export Case. The technician photographs the replacement part's release certificate (8130-3 / Form One) so its times and certificate data fill in, checks every field, picks the return to service statement and signs.`,
       missing:miss.length?miss:undefined,reminder:miss.length?'Ask the technician for the missing '+miss.join(', ')+'.':undefined}};
   }
   const r=await _rt(name,input);
   if(name==='record_corrective_action'&&r&&r.data&&r.data.recorded&&input&&(input.pn_off||input.pn_on||input.sn_off||input.sn_on)){
-    const p=leUpsert({pn_off:input.pn_off,sn_off:input.sn_off,pn_on:input.pn_on,sn_on:input.sn_on,description:input.corrective_action});r.data.part_id=p.id}
+    const p=leUpsert({pn_off:input.pn_off,sn_off:input.sn_off,pn_on:input.pn_on,sn_on:input.sn_on,description:input.corrective_action});delete p._changed;r.data.part_id=p.id}
   return r}}
 // chat card under the tool line
 function partCard(id){
@@ -3777,7 +3795,7 @@ function openParts(){
 async function lePhotoView(id){const u=await phData(id);showModal('PHOTO',u?`<img src="${u}" alt="Release certificate" style="width:100%;height:auto;border-radius:12px;display:block">`:'<div class="kv">This photo is not on this device.</div>')}
 // the editor: component, certificate photo, installed part times, log entry header and sign-off, repair tag
 function openPart(id,focus){
-  const p=lePart(id);if(!p)return;const f=CASE.form=CASE.form||{};const me=Object.assign({},store.get(AMDL_PERSON_KEY,{})||{},store.get(LE_PERSON_KEY,{})||{});
+  const p=lePart(id);if(!p)return;LE_OPEN=id;AMDL_OPEN=false;const f=CASE.form=CASE.form||{};const me=Object.assign({},store.get(AMDL_PERSON_KEY,{})||{},store.get(LE_PERSON_KEY,{})||{});
   if(!me.name&&typeof syCfg==='function')me.name=syCfg().tech||'';
   const RT=leTag();const cu=store.get(LE_TAG_KEY,{})||{};const T=p.tag=p.tag||{};const ol=p.offLife=p.offLife||{};
   if(!p.wo)p.wo=`${f.sn||''}_${dmy(parseDay(p.inst)||new Date())}`.replace(/^_/,'');
@@ -4553,7 +4571,7 @@ async function buildAmdl(v){
   return {blob:new Blob([bytes],{type:'application/pdf'}),notes,snotes};
 }
 // open the AMDL form; pre = {disc, deferral:{g,r}} from the MEL tab or a troubleshooting case
-function openAmdl(pre){
+function openAmdl(pre){LE_OPEN=null;AMDL_OPEN=!!(pre&&pre.caseBound);
   pre=pre||{};const f=collectForm();const last={};const me=store.get(AMDL_PERSON_KEY,{})||{};
   const def=pre.deferral;const disc=pre.discDate||melDisc();const today=new Date();
   const ref=def?(def.g.kind==='cas'?`MEL CAS - ${def.g.name}`:`MEL ${def.g.ata}-${def.g.seq}${def.g.k.split('-').length>2?'-'+def.g.k.split('-').slice(2).join('-'):''}`):'';
