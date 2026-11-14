@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="17b9b64 2026-11-14">
+<meta name="avio-build" content="37b3673 2026-11-14">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -2318,8 +2318,19 @@ function toolEl(b,result){
    deferral / part cards stay outside it. */
 function procBox(){const d=document.createElement('details');d.className='process';
   d.innerHTML='<summary><span class="pic">◈</span><span class="ptx"></span><span class="ms pch">expand_more</span></summary><div class="pbody"></div>';return d}
+/* While the answer runs, the box title is a random shop-floor joke that changes every few seconds; once it's done it reads "Reasoning". */
+const PROC_JOKES=['Replacing Pilots','Filling a Bucket With Prop Wash','Taking the Rest of the Day Off','I Am Too Tired for This','Looking for the Left-Handed Torque Wrench',
+  'Fetching a Can of Blinker Fluid','Waiting for the Part to Clear Customs','Checking If It Was Ever Working','Blaming the Last Shift','Rebooting the Airplane',
+  'Asking the Pilot to Define "Weird Noise"','Counting the Leftover Screws','Hunting for the Muffler Bearings','Sweeping Up Spare Electrons','Bribing the Stores Clerk',
+  'Calling Tech Support From the Hold Line','Reading the Manual (No, Really)','Grabbing a Bucket of Steam','Measuring the Flight Line for Squareness','Ops-Checking the Coffee Maker',
+  'Arguing With the IPC','Wiping Off the Fingerprints','Pretending the CB Was Always In','Pulling the "Could Not Duplicate" Card','Practicing My Safety-Wire Twist',
+  'Negotiating With a Stuck Panel Fastener','Finding Where the Hydraulic Fluid Went','Translating Pilot Squawk Into English','Removing the Remove-Before-Flight Flags','Asking the Avionics Guys to Hold My Wrench'];
+function procJoke(box){const prev=box._joke;let j;do j=PROC_JOKES[Math.floor(Math.random()*PROC_JOKES.length)];while(j===prev&&PROC_JOKES.length>1);box._joke=j;return j}
 function procSummary(box,live,cur){const b=box.querySelector('.pbody'),n=b.querySelectorAll(':scope>.tool,:scope>.think').length;
-  box.classList.toggle('live',!!live);box.querySelector('.ptx').textContent=`Reasoning · ${n} step${n===1?'':'s'}`+(live&&cur?` · ${cur}`:'')}
+  box.classList.toggle('live',!!live);
+  if(live&&!box._jt){procJoke(box);box._jt=setInterval(()=>{if(!box.isConnected){clearInterval(box._jt);return}procJoke(box);procSummary(box,true)},4000)}
+  if(!live&&box._jt){clearInterval(box._jt);box._jt=0}
+  box.querySelector('.ptx').textContent=(live?box._joke:'Reasoning')+` · ${n} step${n===1?'':'s'}`}
 function placeCard(wrap,c){const ref=[...wrap.children].find(k=>k.matches('.aitext,.typing,.usage,.errbox'));wrap.insertBefore(c,ref||null)}
 function groupProcess(wrap){const kids=[...wrap.children];let last=-1;kids.forEach((k,i)=>{if(k.matches('.tool,.think'))last=i});if(last<0)return;
   const box=procBox(),body=box.querySelector('.pbody');wrap.insertBefore(box,kids[0]);
