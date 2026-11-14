@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="48a3d75 2026-11-14">
+<meta name="avio-build" content="eaa1583 2026-11-14">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -332,7 +332,7 @@ body.inchat .gsearch,body.inchat .badges{display:none}
 .badge{font-family:var(--sans);font-size:12px;letter-spacing:.1px;color:var(--text-dim);border:1px solid var(--border2);border-radius:8px;padding:3px 10px;text-transform:none}
 .badge.amber{color:var(--on-tonal);background:var(--tonal);border-color:transparent}
 
-/* bottom navigation bar (Describe · Search · MEL · Wiring) */
+/* bottom navigation bar (Mx Magic · Search · RTS · …) */
 #app{height:var(--app-h,100dvh)}
 .tabs{position:relative;flex-shrink:0;width:100%;z-index:40;margin:0;gap:0;border:none;border-radius:0;background:var(--nav);padding:12px 4px calc(12px + var(--safe-b));box-shadow:0 -1px 0 var(--border)}
 .tab{display:flex;flex-direction:column;align-items:center;gap:4px;padding:0;background:none!important;box-shadow:none!important;color:var(--text-dim);font-family:var(--sans);font-size:12px;font-weight:500;letter-spacing:.3px;border-radius:0}
@@ -691,7 +691,7 @@ try{if(sessionStorage.getItem('avio_splash'))document.getElementById('splash').r
     <!-- INTAKE -->
     <section class="view" id="intakeView">
       <div class="tabs">
-        <button class="tab on" data-tab="describe"><span class="pill"><span class="ms">edit_note</span></span>Describe</button>
+        <button class="tab on" data-tab="describe"><span class="pill"><span class="ms">edit_note</span></span>Mx Magic</button>
         <button class="tab" data-tab="docs"><span class="pill"><span class="ms">description</span></span>RTS</button>
         <button class="tab" data-tab="checks"><span class="pill"><span class="ms">checklist</span></span>PFI</button>
         <button class="tab" data-tab="search"><span class="pill"><span class="ms">search</span></span>Search</button>
@@ -3011,7 +3011,7 @@ $('#cmcInput').addEventListener('keydown',e=>{
 $('#cmcInput').addEventListener('blur',()=>setTimeout(()=>$('#cmcList').classList.add('hidden'),150));
 
 
-/* ── airframe, engine 1, engine 2 and APU times: one block, used on the Describe form and in Export Case ──
+/* ── airframe, engine 1, engine 2 and APU times: one block, used on the Mx Magic form and in Export Case ──
    The sync button copies the airframe hours / cycles to both engines and keeps them in step while it is on. */
 const TIMES_KEYS=['tt','cyc','e1Hrs','e1Cyc','e2Hrs','e2Cyc','apuHrs'];
 const SYNC_KEY=PFX+'_synceng'; // last sync choice on this device, the default for a new case
@@ -4044,7 +4044,7 @@ function fitAppHeight(){
     sn.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();sn.blur()}});
     $('#btnNew').addEventListener('click',()=>{sn.value='';sn.placeholder='Name This Session'});syncSessName()}
 
-  // tabs work from the case conversation too: Describe returns to the open case, the others leave it in the background
+  // tabs work from the case conversation too: Mx Magic returns to the open case, the others leave it in the background
   $$('.tab').forEach(t=>t.addEventListener('click',()=>{
     document.body.dataset.tab=curTab;
     if(curTab==='search')setTimeout(()=>{const q=$('#sQuery');if(q&&$('#chatView').classList.contains('hidden'))q.focus()},0);
@@ -4302,7 +4302,7 @@ function renderDocs(){
     $$('.docsec').forEach(d=>{d.open=open.includes(d.dataset.sec);d.addEventListener('toggle',()=>{docsSaveOpen();if(d.open&&d.dataset.sec==='mel')initMelPane()})})}
   const c=CASE,L=c?leParts():[],RT=leTag(),DF=docsForm();
   $('#docsCase').innerHTML=c?`Case: <b>${esc(c.title||'Untitled')}</b>${c.form&&c.form.reg?' · '+esc(c.form.reg):''}${c.form&&c.form.sn?' · S/N '+esc(c.form.sn):''}`:
-    'No case open. Component transactions, log entries and repair tags belong to a case: open one from Recent Cases, start one on Describe, or start a paperwork-only case below.';
+    'No case open. Component transactions, log entries and repair tags belong to a case: open one from Recent Cases, start one on Mx Magic, or start a paperwork-only case below.';
   // 1. component transactions
   $('#dsPartsN').textContent=L.length?String(L.length):'';
   $('#dsParts').innerHTML=!c?`<div class="grid2"><div class="field"><label>Tail Number</label><input id="dsReg" autocomplete="off" autocapitalize="characters" style="text-transform:uppercase" value="${esc(($('#fReg')||{}).value||'')}"></div>
@@ -5653,7 +5653,7 @@ function openCkImport(editId){
   if(vv)vv.addEventListener('resize',()=>{const a=document.activeElement;if(a&&a.closest&&a.closest('#main')&&a.matches('input,textarea,select'))setTimeout(()=>reveal(a),50)});
 })();
 
-/* ═════════ Voice dictation (browser speech recognition): the Describe box and the case chat; the text stays editable ═════════ */
+/* ═════════ Voice dictation (browser speech recognition): the Mx Magic box and the case chat; the text stays editable ═════════ */
 function attachDictation(btn,ta,hint,o){
   if(!btn||!ta)return;o=o||{};const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   const say=t=>{if(!hint)return;hint.textContent=t||'';if(o.hideEmpty)hint.classList.toggle('hidden',!t)};
