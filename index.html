@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="83550c1 2026-11-13">
+<meta name="avio-build" content="e225a98 2026-11-14">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -947,7 +947,7 @@ async function brkCall(path,body,session){
 async function brkJoin(code){
   if(!window.PublicKeyCredential)throw new Error('This browser cannot make passkeys. Use Safari on iPhone or iPad (iOS 16 or later).');
   const o=await brkCall('/auth/join/options',{code});const pk=o.publicKey;
-  const c=await navigator.credentials.create({publicKey:{...pk,challenge:ub(pk.challenge),user:{...pk.user,id:ub(pk.user.id)}}});
+  const c=await navigator.credentials.create({publicKey:{...pk,challenge:ub(pk.challenge),user:{...pk.user,id:ub(pk.user.id)},excludeCredentials:(pk.excludeCredentials||[]).map(x=>({...x,id:ub(x.id)}))}});
   const v=await brkCall('/auth/join/verify',{cid:o.cid,id:c.id,clientDataJSON:bu(c.response.clientDataJSON),attestationObject:bu(c.response.attestationObject)});
   return v.session}
 async function brkLogin(){
@@ -1001,11 +1001,13 @@ async function brkSignOut(){const s=BRK.s;if(s&&s.session)brkCall('/auth/logout'
 document.addEventListener('visibilitychange',()=>{const s=BRK.s;if(document.visibilityState==='visible'&&s&&s.data&&s.data.exp-Date.now()<600000)brkRefresh()});
 function brkSettingsHtml(){const s=BRK.s;
   return `<h3 class="amh">Sign In</h3>${s&&s.session?`<div class="kv" id="brkState">Signed in as <b>${esc(s.name||'')}</b> · ${esc((s.op&&s.op.name)||'')}. Access to your organization's manuals and cases renews by itself.</div>
-    <button class="btn2 small" id="brkOut" style="margin:6px 0 4px">Sign Out</button>`
+    <div class="grid2" style="margin:8px 0 4px"><button class="btn2 small" id="brkAdd"><span class="ms">add_to_home_screen</span>Add Another Device</button><button class="btn2 small" id="brkOut">Sign Out</button></div>
+    <div id="brkLink"></div>`
   :`<div class="hint" style="margin-bottom:8px">If your organization uses Avio.AI sign-in, sign in with Face ID or Touch ID instead of entering GitHub tokens.</div>
     <button class="btn2" id="brkIn" style="width:100%"><span class="ms">passkey</span>Sign In With Passkey</button>
-    <div class="grid2" style="margin-top:10px;align-items:end"><div class="field" style="margin:0"><label>Invite code (first time on this device)</label><input id="brkCode" placeholder="ABCDE-FGHJK" autocapitalize="characters" autocomplete="off" spellcheck="false"></div>
-    <button class="btn2" id="brkJoin">Join With Invite Code</button></div>`}
+    <div class="grid2" style="margin-top:10px;align-items:end"><div class="field" style="margin:0"><label>Invite or device code (first time on this device)</label><input id="brkCode" placeholder="ABCDE-FGHJK" autocapitalize="characters" autocomplete="off" spellcheck="false"></div>
+    <button class="btn2" id="brkJoin">Join With Code</button></div>
+    <div class="hint" style="margin-top:6px">Already use Avio.AI on another device? There, open Settings → Sign In → <b>Add Another Device</b> and enter the code it shows here.</div>`}
   <div class="hint" id="brkMsg" style="margin-top:6px"></div><hr style="border:none;border-top:1px solid var(--border);margin:14px 0">`}
 function brkWire(){
   const m=t=>{const e=$('#brkMsg');if(e)e.innerHTML=t};const fail=e=>m(`<span style="color:var(--red)">✖ ${esc(e&&e.name==='NotAllowedError'?'Face ID was cancelled or timed out.':(e.message||e))}</span>`);
@@ -1013,6 +1015,12 @@ function brkWire(){
   if($('#brkIn'))$('#brkIn').onclick=async()=>{try{m('Waiting for Face ID…');await done(await brkLogin(),'Signed in')}catch(e){fail(e)}};
   if($('#brkJoin'))$('#brkJoin').onclick=async()=>{const code=($('#brkCode').value||'').trim();if(!code){m('<span style="color:var(--red)">Enter the invite code from your administrator.</span>');return}
     try{m('Creating your passkey…');await done(await brkJoin(code),'Joined')}catch(e){fail(e)}};
+  if($('#brkAdd'))$('#brkAdd').onclick=async()=>{const s=BRK.s;if(!s)return;try{m('Making a code…');const r=await brkCall('/auth/link/start',{},s.session);m('');
+    const until=new Date(r.expires_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    $('#brkLink').innerHTML=`<div class="kv" style="margin:8px 0"><div>On the new device, open Avio.AI → Settings → Sign In, enter this code and tap <b>Join With Code</b>:</div>
+      <div style="font:700 24px var(--mono);letter-spacing:3px;margin:8px 0">${esc(r.code)}</div><div class="hint">Works once, until ${esc(until)}. Or send the new device this link: <span style="word-break:break-all">${esc(r.link)}</span></div>
+      ${navigator.share?'<button class="btn2 small" id="brkShare" style="margin-top:8px"><span class="ms">share</span>Send Link…</button>':''}</div>`;
+    const sh=$('#brkShare');if(sh)sh.onclick=()=>navigator.share({title:'Avio.AI device code',url:r.link}).catch(()=>{})}catch(e){fail(e)}};
   if($('#brkOut'))$('#brkOut').onclick=async()=>{await brkSignOut();m('Signed out.');setTimeout(connectFresh,500)}}
 /* data connections: cfg.sources = [{id, mode: github|url|device|demo, repo, branch, path, url}], cfg.active = the one in use */
 if(!Array.isArray(cfg.sources)){cfg.sources=cfg.dataMode&&cfg.dataMode!=='none'?[{id:'s1',mode:cfg.dataMode,repo:cfg.dataRepo,branch:cfg.dataBranch,path:cfg.dataPath,url:cfg.dataUrl}]:[];cfg.active=(cfg.sources[0]||{}).id||''}
@@ -4787,7 +4795,7 @@ const SETUP=parseSetup();
 // invite link from the administrator: …/#join=ABCDE-FGHJK opens Settings with the code filled in
 const JOIN=(location.hash.match(/^#join=([A-Za-z0-9-]{10,11})$/)||[])[1]||'';if(JOIN)try{history.replaceState(null,'',location.pathname+location.search)}catch(e){}
 function openJoin(){openSettings(null,!dataConnected());const c=$('#brkCode');if(c){c.value=JOIN;c.scrollIntoView({block:'center'})}
-  const m=$('#brkMsg');if(m)m.innerHTML=BRK.s&&BRK.s.session?'You are already signed in on this device.':'Tap <b>Join With Invite Code</b>, then use Face ID or Touch ID to make your passkey.'}
+  const m=$('#brkMsg');if(m)m.innerHTML=BRK.s&&BRK.s.session?'You are already signed in on this device.':'Tap <b>Join With Code</b>, then use Face ID or Touch ID to make your passkey.'}
 window.addEventListener('hashchange',()=>{const S=parseSetup();if(S)openSetup(S)});
 const srcSame=(a,b)=>a.mode===b.mode&&(a.mode==='github'?String(a.repo).toLowerCase()===String(b.repo).toLowerCase()&&(a.path||'')===(b.path||''):a.url.replace(/\/?$/,'/')===b.url.replace(/\/?$/,'/'));
 function openSetup(S){
