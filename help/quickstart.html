@@ -24,7 +24,6 @@ figure.pdfpic img{width:85%;max-height:none}
 p:has(+ figure){break-after:avoid}
 h2{break-before:auto}
 </style>
-<meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 @media screen{body{max-width:760px;margin:0 auto;padding:18px 16px 40px;font-size:16px;background:#fff}
 figure img{max-height:none;height:auto}figure.strip img{width:100%;max-width:560px}figure.pdfpic img{width:100%}
@@ -32,7 +31,7 @@ table{display:block;overflow-x:auto}}
 </style>
 </head><body>
 <h1>Avio.AI Quick Start Guide</h1>
-<p class="byline">9 NOV 2026 · Gabriel</p>
+<p class="byline">14 NOV 2026 · Gabriel</p>
 
 <h2>Avio.AI in 30 Seconds</h2>
 <p>Avio.AI is a pocket maintenance helper. Tell it what the airplane is doing, and it digs through <strong>your company's own manuals</strong> for likely causes, tests, MEL relief and paperwork. It does the reading. You do the thinking, the wrenching and the signing.</p>
@@ -40,15 +39,18 @@ table{display:block;overflow-x:auto}}
 <p>This is the short version. The full <a href="guide.html">Avio.AI User Guide</a> has every button explained, with pictures.</p>
 
 <h2>Five-Minute Setup</h2>
+<p>You need an iPhone or iPad (iOS 16 or later) and an <strong>invite link</strong> from your administrator. It's made in your name, works once, and expires after 7 days.</p>
 <ol>
-<li>Open <a href="https://avio-ai.github.io/avio-app/">avio-ai.github.io/avio-app</a> on your phone. On an iPhone, tap Share, then <strong>Add to Home Screen</strong>.</li>
-<li>Tap the <strong>setup link</strong> your administrator sent you. No link? Open <strong>Settings</strong> (the gear), tap <strong>＋ Add a Connection</strong>, enter the data location and access key, then tap <strong>Save &amp; Connect</strong>.</li>
-<li>Paste the <strong>Anthropic API Key</strong> in Settings. That wakes up the AI. Without it, Search, MEL and PFI still work.</li>
-<li>Type your name under <strong>Technician Name</strong>.</li>
+<li>Open the invite link in <strong>Safari</strong>. Avio.AI opens Settings with your code already filled in.</li>
+<li>Tap <strong>Join With Code</strong> and approve with Face ID or Touch ID. Save the <strong>passkey</strong> when your phone asks: that's your sign-in from now on. No passwords, no tokens. Your company's aircraft load, and case sync turns on in your name.</li>
+<li>Tap <strong>Share</strong>, then <strong>Add to Home Screen</strong>, then <strong>Add</strong>. Close Safari.</li>
+<li>Open <strong>Avio.AI</strong> from your Home Screen, tap the gear, then <strong>Sign In With Passkey</strong>. The Home Screen app keeps its own storage, so it needs this one tap. Your passkey comes along.</li>
+<li>Still in Settings, paste the <strong>Anthropic API Key</strong> your administrator gives you, tick <strong>Remember keys on this device</strong>, and tap <strong>Save &amp; connect</strong>. The key wakes up the AI. Without it, Search, RTS and PFI still work.</li>
 <li>Tap the aircraft name in the top bar and pick your airplane.</li>
 </ol>
+<p><strong>Adding a second phone or tablet?</strong> On the device you already use, open Settings → Sign In → <strong>Add Another Device</strong>. It shows a one-time code and a link you can send. On the new device, open the link in Safari (or enter the code under Sign In and tap <strong>Join With Code</strong>), then do steps 3 to 6 there.</p>
 <p>Just looking around? Tap <strong>Try the Demo Aircraft</strong>. It's a made-up jet, so you can't break anything real.</p>
-<p><strong>Keys are like house keys.</strong> Don't text them, email them or tape them to the hangar fridge.</p>
+<p><strong>Keys are like house keys.</strong> Don't text the API key, email it or tape it to the hangar fridge. Your passkey lives in your phone's keychain, and a used invite link opens nothing.</p>
 
 <h2>Find Your Way Around</h2>
 <p>The top bar works on every tab:</p>
@@ -56,32 +58,33 @@ table{display:block;overflow-x:auto}}
 <p>The four tabs live along the bottom:</p>
 <figure class="strip"><img src="02b-tabs.webp" loading="lazy" alt="Tabs"></figure>
 <table><thead><tr><th>Tab</th><th>Use It To…</th><th>Needs the AI Key?</th></tr></thead><tbody>
-<tr><td><strong>Describe</strong></td><td>Tell the app what's wrong and start a troubleshooting case</td><td>Yes</td></tr>
-<tr><td><strong>MEL</strong></td><td>Check if the airplane can legally fly with something broken, and make the deferral paperwork</td><td>No</td></tr>
+<tr><td><strong>Mx Magic</strong></td><td>Tell the app what's wrong and start a troubleshooting case</td><td>Yes</td></tr>
+<tr><td><strong>RTS</strong> (Return To Service)</td><td>Do a case's paperwork in one place: part swaps, discrepancy log, MEL deferral, log entries and repair tags</td><td>No</td></tr>
 <tr><td><strong>PFI</strong></td><td>Initial a checklist line by line, sign it and save a one-page PDF</td><td>No (except Import)</td></tr>
 <tr><td><strong>Search</strong></td><td>Search the manuals, or flip the switch to <strong>Wiring</strong> for pin-outs and drawings</td><td>No</td></tr>
 </tbody></table>
 
 <h2>Fix a Squawk in Six Steps</h2>
 <ol>
-<li>On <strong>Describe</strong>, enter the tail and serial number under <strong>Aircraft</strong>.</li>
+<li>On <strong>Mx Magic</strong>, enter the tail and serial number under <strong>Aircraft</strong>.</li>
 <li>Type the CAS / CMC message or fault code exactly as shown. Add every message, not just the first.</li>
 <li>Under <strong>What's Happening?</strong>, tell the story: when it started, what you saw, what you tried. Tap <strong>PTT</strong> to talk instead of type.</li>
 <li>Optional but gold: open <strong>Flight Phase &amp; Conditions</strong> (airport, phase, altitude, temps) and tap <strong>Add Photo</strong> for a screen or part label.</li>
-<li>Tap <strong>Fix My Plane ▸</strong>. The AI answers with likely causes, tests to run and the manual pages behind them.</li>
+<li>Tap <strong>Fix My Plane ▸</strong>. The AI answers with likely causes, tests to run and the manual pages behind them. Its look-ups fold into a <strong>Reasoning</strong> box; tap it if you want to watch.</li>
 <li>Reply with what you find ("connector was loose", "28 volts"). When it's fixed, say so. The AI drafts the corrective action and log entry, and the status bar holds the <strong>Case Brief</strong> and <strong>Close Case</strong>.</li>
 </ol>
-<figure><img src="04-describe-top.webp" loading="lazy" alt="Describe tab"></figure>
+<figure><img src="04-describe-top.webp" loading="lazy" alt="Mx Magic tab"></figure>
 <p><strong>Tap every citation.</strong> It opens the manual page so you can see it with your own eyes.</p>
 
-<h2>Defer It: the MEL Tab</h2>
+<h2>Defer It and Do the Paperwork: the RTS Tab</h2>
 <ol>
-<li>Pick your company's <strong>operating rule</strong> (Part 91, Part 135 and so on).</li>
+<li>Open <strong>RTS</strong>, expand <strong>MEL</strong> and pick your company's <strong>operating rule</strong> (Part 91, Part 135 and so on).</li>
 <li>Enter the <strong>Day Of Discovery</strong>. The app works out the repair-by date.</li>
 <li>Search the broken item or CAS message, read each relief option and its <strong>REQUIRED</strong> (M) and (O) steps.</li>
 <li>Tap <strong>Create Deferral PDF</strong>, or your company's discrepancy form.</li>
 </ol>
 <p>Your company's approved MEL always has the final say.</p>
+<p><strong>Swapped a part?</strong> On <strong>RTS</strong>, tap <strong>Add Component Transaction</strong> once for each part, then open its <strong>Log Entry</strong> (and repair tag, if your company uses one). No case open? Tap <strong>Start a Paperwork Case</strong> first.</p>
 
 <h2>Check It: the PFI Tab</h2>
 <ol>
@@ -105,8 +108,10 @@ table{display:block;overflow-x:auto}}
 <h2>Quick Fixes and Help</h2>
 <table><thead><tr><th>Problem</th><th>Quick Fix</th></tr></thead><tbody>
 <tr><td>The AI doesn't answer</td><td>Check the <strong>Anthropic API Key</strong> in Settings and your signal</td></tr>
-<tr><td>"Can't reach this connection"</td><td>The access key may have expired. Ask your administrator</td></tr>
-<tr><td>A case is missing on this phone</td><td>Turn on sync in Settings, then open <strong>Recent Cases</strong></td></tr>
+<tr><td>"That invite code is not valid or has expired"</td><td>Invites work once, within 7 days. Ask your administrator for a new one</td></tr>
+<tr><td>"This passkey is not registered with Avio.AI"</td><td>Ask your administrator for a new invite, then join again</td></tr>
+<tr><td>The app asks for the API key every time</td><td>Use the Home Screen app, not Safari, and tick <strong>Remember keys on this device</strong></td></tr>
+<tr><td>A case is missing on this phone</td><td>Open <strong>Recent Cases</strong> to pull the latest</td></tr>
 <tr><td>Forgot how something works</td><td>Tap <strong>Help</strong>, then <strong>User Guide</strong> or <strong>Quick Start Guide</strong></td></tr>
 <tr><td>No signal at the airplane</td><td>Tap <strong>Download Data For Offline Use</strong> in Settings while on Wi-Fi</td></tr>
 <tr><td>Something's broken or missing</td><td>Tap <strong>Help</strong> (the question mark in the top bar), then <strong>Send Feedback</strong>. It goes straight to the Avio.AI team</td></tr>

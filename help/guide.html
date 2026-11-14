@@ -31,7 +31,7 @@ table{display:block;overflow-x:auto}}
 </style>
 </head><body>
 <h1>Avio.AI User Guide</h1>
-<p class="byline">12 NOV 2026 · Gabriel</p>
+<p class="byline">14 NOV 2026 · Gabriel</p>
 
 <h2>Welcome Aboard</h2>
 <p>Avio.AI is a pocket-sized maintenance helper: you tell it what the airplane is doing, and it digs through your manuals faster than a crew chief looking for the last donut. It reads only your company's own manuals, so it never makes up a book that doesn't exist.</p>
@@ -39,17 +39,37 @@ table{display:block;overflow-x:auto}}
 <p><strong>The one rule to remember:</strong> every answer comes with a citation (a manual, a chapter, a page). Tap it and check it. If the app and the manual ever disagree, the manual wins. Every time. No arguments.</p>
 
 <h2>Getting Set Up</h2>
-<p>Setup takes about five minutes, and most of it is pasting things your administrator sends you. The app itself is empty until you connect it to your company's data, kind of like a new phone before you sign in.</p>
+<p>Setup takes about five minutes. You need an iPhone or iPad (iOS 16 or later) and an <strong>invite link</strong> from your administrator. The invite is made in your name, works once, and expires after 7 days. The app itself is empty until you sign in, kind of like a new phone before you add your accounts.</p>
 <ol>
-<li>Open the app in your phone's web browser at <a href="https://avio-ai.github.io/avio-app/">avio-ai.github.io/avio-app</a>. On an iPhone, tap Share, then <strong>Add to Home Screen</strong>, so it sits next to your other apps.</li>
-<li>If your administrator sent you a <strong>setup link</strong>, tap it. It fills in where your data lives. You still paste each access key yourself, because keys never travel inside a link.</li>
-<li>No link? Open <strong>Settings</strong> (the gear) and, under Connection, pick <strong>＋ Add a Connection</strong>. Enter the data location and the access key you were given, then tap <strong>Save &amp; Connect</strong>.</li>
-<li>Paste the <strong>Anthropic API Key</strong> in Settings. This is what wakes up the AI assistant. Without it, Search (manuals and wiring), MEL and PFI still work, but the chat stays quiet.</li>
-<li>Type your name under <strong>Technician Name</strong>. It shows on every case you start, so people know whom to thank (or whom to call).</li>
+<li>Open the invite link in <strong>Safari</strong>. Avio.AI opens Settings with your code already filled in.</li>
+<li>Tap <strong>Join With Code</strong> and approve with Face ID or Touch ID. Save the <strong>passkey</strong> when your phone asks: that's your sign-in from now on. Your company's aircraft load, and case sync turns on in your name.</li>
+<li>Tap <strong>Share</strong>, then <strong>Add to Home Screen</strong>, then <strong>Add</strong>, so Avio.AI sits next to your other apps. Close Safari.</li>
+<li>Open <strong>Avio.AI</strong> from your Home Screen, tap the gear, then <strong>Sign In With Passkey</strong>. The Home Screen app keeps its own storage, so it needs this one tap. Your passkey comes along.</li>
+<li>Still in Settings, paste the <strong>Anthropic API Key</strong> your administrator gives you, tick <strong>Remember keys on this device</strong>, and tap <strong>Save &amp; connect</strong>. This is what wakes up the AI assistant. Without it, Search (manuals and wiring), RTS (MEL and paperwork) and PFI still work, but the chat stays quiet.</li>
+<li>Tap the aircraft name in the top bar and pick your airplane.</li>
 </ol>
 <figure><img src="01-welcome.webp" loading="lazy" alt="Welcome screen"></figure>
 <p>Just want to look around first? Tap <strong>Try the Demo Aircraft</strong>. It is a made-up jet with made-up manuals, so you can't break anything real.</p>
-<p><strong>Keys are like house keys.</strong> Don't text them, email them, or tape them to the hangar fridge. If one leaks, tell your administrator so they can change it.</p>
+<p><strong>Keys are like house keys.</strong> Don't text the API key, email it, or tape it to the hangar fridge. If it leaks, tell your administrator so they can change it. Your passkey lives in your phone's keychain, and a used invite link opens nothing.</p>
+<p><strong>Company not on Avio.AI sign-in yet?</strong> Your administrator may send a <strong>setup link</strong> instead, or ask you to open <strong>Settings</strong>, pick <strong>＋ Add a Connection</strong>, and enter a data location and access key by hand. Then type your name under <strong>Technician Name</strong> so it shows on your cases.</p>
+
+<h2>Signing In With a Passkey</h2>
+<p>With Avio.AI sign-in, you never paste a GitHub access key into your phone. A passkey lives on your phone and unlocks with your face or fingerprint, so there's nothing to type, lose or tape to the hangar fridge.</p>
+<figure><img src="37-signin.webp" loading="lazy" alt="Sign In"></figure>
+<ol>
+<li><strong>First time on this device:</strong> open the invite link your administrator sent you. Settings opens with the code already filled in. Only have the code? Type it under <strong>Invite or device code (first time on this device)</strong>. Tap <strong>Join With Code</strong>, then use Face ID or Touch ID to make your passkey.</li>
+<li><strong>After that:</strong> if you're ever signed out, or you just added the app to your Home Screen, open <strong>Settings</strong> and tap <strong>Sign In With Passkey</strong>. One look at your phone and you're back in.</li>
+<li>The app says <strong>Joined</strong> or <strong>Signed in</strong>, then opens your aircraft. Your company's manuals and case sync are connected for you.</li>
+</ol>
+<p><strong>A second phone or tablet:</strong> on the device you already use, open Settings → Sign In → <strong>Add Another Device</strong>. It shows a one-time code (good for a short while) and a link you can send with <strong>Send Link…</strong>. On the new device, open the link in Safari, or type the code under Sign In and tap <strong>Join With Code</strong>. You stay one person with two devices, not two strangers with the same name.</p>
+<p>Good to know:</p>
+<ul>
+<li>Settings shows <strong>Signed in as</strong> your name and your company. Your access renews by itself in the background, even in the middle of a case.</li>
+<li>Connections that come from sign-in say so in Settings, and you can't edit them by hand. <strong>Sign Out</strong> removes them from this device.</li>
+<li>Passkeys need Safari on an iPhone or iPad with iOS 16 or later.</li>
+<li>Face ID cancelled or timed out? Just tap the button again. It's a passkey, not a polygraph.</li>
+<li>If your access runs out or is switched off, a note says to <strong>sign in again</strong>. Tap it to open Settings.</li>
+</ul>
 
 <h2>Picking Your Aircraft</h2>
 <p>Tap the aircraft name in the top bar to open the picker. Each aircraft type keeps its own manuals, cases and settings, so a hydraulic problem on one model never wanders into another model's notes.</p>
@@ -69,7 +89,7 @@ table{display:block;overflow-x:auto}}
 <figure class="strip"><img src="02b-tabs.webp" loading="lazy" alt="Tabs"></figure>
 <table><thead><tr><th>Tab</th><th>What It's For</th><th>Needs the AI Key?</th></tr></thead><tbody>
 <tr><td><strong>Mx Magic</strong></td><td>Tell the app what's wrong and start a troubleshooting case</td><td>Yes</td></tr>
-<tr><td><strong>MEL</strong></td><td>Check whether the airplane can legally fly with something broken, and make the deferral paperwork</td><td>No</td></tr>
+<tr><td><strong>RTS</strong> (Return To Service)</td><td>Keep a case's paperwork in one place: part swaps, the discrepancy log, MEL relief and deferrals, log entries and repair tags</td><td>No</td></tr>
 <tr><td><strong>PFI</strong></td><td>Fill in a checklist, initial each line, sign it and save a one-page PDF</td><td>No</td></tr>
 <tr><td><strong>Search</strong></td><td>Two tools behind one switch. <strong>Manuals</strong>: type words, part names or chapter numbers and read the matching pages. <strong>Wiring</strong>: look up a connector, see which wire goes to which pin, and follow a wire end to end</td><td>No</td></tr>
 </tbody></table>
@@ -101,8 +121,9 @@ table{display:block;overflow-x:auto}}
 <figure><img src="06-describe-phase.webp" loading="lazy" alt="Flight phase and conditions"></figure>
 <p>The AI answers with likely causes in order, the tests to run, and the manual pages that back it up. Reply in the chat box with what you found, like "connector was loose" or "reading was 28 volts", and it adjusts the plan. You can also tap the microphone to talk instead of type, which is handy when your hands are covered in hydraulic fluid.</p>
 <figure><img src="07-chat.webp" loading="lazy" alt="AI answer"></figure>
+<p><strong>Want to watch it think?</strong> While the AI works, its reasoning and every manual it looks up go into one <strong>Reasoning</strong> box, closed by default, with a (not entirely serious) shop-floor status line on it while it works. When the answer is in, the box just says <strong>Reasoning</strong> and how many steps it took. Tap the box to see the steps, or leave it closed and read the answer below it.</p>
+<p><strong>Where the answer starts:</strong> when the AI finishes, the screen scrolls back to the start of its answer (the <strong>Assessment</strong>), so you read it top to bottom instead of landing at the last line. If you scrolled somewhere else while it was typing, the app leaves you there.</p>
 <p><strong>Tap every citation.</strong> It opens the manual page so you can see it with your own eyes. The AI is smart, but the manual is the law.</p>
-<p><strong>Want to watch it think?</strong> While the AI works, its reasoning and every manual it looks up go into one <strong>Reasoning</strong> box, closed by default, with a (not entirely serious) status line on it while it works. When the answer is in, the box is labeled <strong>Reasoning</strong>. Tap the box to watch the steps live, or leave it closed and just read the answer when it lands below.</p>
 <p><strong>Switching cases mid-answer?</strong> If you open another case (or tap New) while the AI is still typing, the app stops that answer first, so nothing lands in the wrong case. No crossed wires, which is the whole point of this job.</p>
 <p><strong>Same case on two devices?</strong> If a teammate opens a case while the AI is still answering it on your phone, they see a note saying so, and their reply box waits until the answer is in. Then the answer shows up on their screen too, so nobody talks over each other (or over the robot).</p>
 <p>If your company has connected the manual PDFs, a citation opens the real manual page with your words highlighted. Pinch to zoom, swipe left or right to turn the page, and tap <strong>Text</strong> for plain words. The demo jet has no PDFs, so it shows the text view:</p>
@@ -124,15 +145,17 @@ table{display:block;overflow-x:auto}}
 <figure><img src="36-case-deferral.webp" loading="lazy" alt="Deferral card with Day of Discovery"></figure>
 
 <h2>The RTS Tab</h2>
-<p>All the paperwork for a case lives in one place. Tap <strong>RTS</strong> (Return To Service) and expand what you need, in this order:</p>
+<p>All the paperwork for a case lives in one place, like a clipboard that never gets left on the wing. Tap <strong>RTS</strong> (Return To Service) and expand what you need. The sections come in the order you usually do the work:</p>
 <ul>
-<li><strong>Component Transaction</strong>: every part removed and replaced on the case. Tap <strong>Add Component Transaction</strong> as many times as you need; each one keeps its own part and serial numbers.</li>
-<li><strong>Discrepancy log</strong> (your company's form, by its short name): fill it for the open case, or just the discrepancy.</li>
+<li><strong>Component Transactions</strong>: every part removed and replaced on the case. Tap <strong>Add Component Transaction</strong> once for each part swap; each one keeps its own part and serial numbers. Tap one to open it.</li>
+<li><strong>Discrepancy log</strong> (your company's form, shown by its short name): open it for the case, or for just the discrepancy. If the case has an MEL deferral, that part comes filled in.</li>
 <li><strong>MEL</strong>: look up relief and defer, as above.</li>
 <li><strong>Log Entry</strong>: one component log entry per transaction.</li>
 <li><strong>Repair tag</strong>: one tag per removed part, when your company has its tag set up.</li>
 </ul>
-<p>No case open? Enter the tail and serial number and tap <strong>Start a Paperwork Case</strong> to do the paperwork without a troubleshooting chat. The app remembers which sections you keep open.</p>
+<p>A small number next to a section says how many are in it, and the app remembers which sections you keep open.</p>
+<figure><img src="38-docs.webp" loading="lazy" alt="The RTS tab"></figure>
+<p><strong>No case open?</strong> Type the tail and serial number under Component Transactions and tap <strong>Start a Paperwork Case</strong>. You get a case just for the paperwork, with no troubleshooting chat. You can still talk to the AI in it later if the squawk turns out to be sneakier than it looked.</p>
 
 <h2>Wrapping Up a Case</h2>
 <p>When the problem is fixed, tell the AI in plain words, for example "replaced the valve, ops check good." It writes a log-style corrective action that cites the removal and test tasks it found. Check the wording before you use it; it's your entry, not the robot's.</p>
@@ -179,7 +202,7 @@ table{display:block;overflow-x:auto}}
 <figure class="pdfpic"><img src="23-checks-pdf.webp" loading="lazy" alt="Exported checklist"></figure>
 <p><strong>History:</strong> tap <strong>History</strong> at the top of the PFI tab to see every checklist saved for this aircraft, with the tail number, date, how far along it is and who initialed it. Tap <strong>Open</strong> to keep working on one or export it again. Tap <strong>✕</strong> twice to delete one.</p>
 <figure><img src="25-checks-history.webp" loading="lazy" alt="Checklist History"></figure>
-<p><strong>Two technicians, one checklist:</strong> if your company turned on case sync in Settings, checklists are shared too. A teammate on another phone opens the same checklist from History, adds their initials and signs, and the PDF gets a signature row for each of you. With sync off, the checklist stays on your phone. The note under the signature box tells you which one you have.</p>
+<p><strong>Two technicians, one checklist:</strong> with case sync on (it's on automatically when you sign in with a passkey), checklists are shared too. A teammate on another phone opens the same checklist from History, adds their initials and signs, and the PDF gets a signature row for each of you. With sync off, the checklist stays on your phone. The note under the signature box tells you which one you have.</p>
 <p><strong>Fixing a checklist:</strong> spot a typo or a missing line? Tap <strong>Edit</strong> at the top of any checklist. Every line shows up as plain text you can reword, add or delete. Tick <strong>I checked every line of this checklist</strong>, then tap <strong>Save Changes</strong>. With sync on, the fix reaches every technician on this aircraft type. With sync off, it stays on your phone. Changed your mind? <strong>Restore the Data Set Version</strong> (tap it twice) puts your company's original back.</p>
 <figure><img src="29-checks-edit.webp" loading="lazy" alt="Edit checklist"></figure>
 <p><strong>Bringing in your own form:</strong> tap <strong>Import</strong>, then <strong>Choose PDF</strong> and pick your company's inspection form (an MSI, for example). The AI writes it out as a checklist, so this part needs the Anthropic API key. You check every line against the pictures of the original pages, fix anything it got wrong, tick the box and tap <strong>Approve &amp; Add Checklist</strong>. Nobody can use it until you approve it. With sync on, everyone gets it. Later, <strong>Edit</strong> fixes a line or loads a new revision of the form, and <strong>Remove This Checklist</strong> (tap twice) takes it away for everyone.</p>
@@ -187,13 +210,14 @@ table{display:block;overflow-x:auto}}
 <p>The checklist on your phone is a helper. If it and the current manual ever disagree, the manual wins (you've heard that one before).</p>
 
 <h2>Case Email and Syncing Across Devices</h2>
-<p>Your cases can follow you from phone to tablet to laptop, and replies from Tech Ops can land right in the case. Your administrator turns these on once; after that they mostly run themselves.</p>
+<p>Your cases can follow you from phone to tablet to laptop, and replies from Tech Ops can land right in the case.</p>
 <ul>
-<li><strong>Sync:</strong> in Settings, turn on <strong>Sync Case History Across Devices</strong>. Start a case on your phone, finish it on your tablet. A small cloud icon means a case was saved on another device and will download when you open it.</li>
+<li><strong>Sync:</strong> signed in with a passkey? Sync is already on, and your cases are kept in your company's cases repo. There's no access key to paste. (Without passkey sign-in, turn on <strong>Sync Case History Across Devices</strong> in Settings and enter what your administrator gave you.) Start a case on your phone, finish it on your tablet. A small cloud icon means a case was saved on another device and will download when you open it.</li>
 <li><strong>Case tag:</strong> every email the app writes has a tag in the subject, like <code>[Case N123AB-K7Q]</code>. Keep it in the subject when you forward or reply. It's the case's name tag at the party.</li>
 <li><strong>Replies:</strong> when Tech Ops answers, the app shows a banner like "2 case emails to file." Tap <strong>Review</strong>, check it matched the right case, then tap <strong>Import</strong>. Attachments come in as documents or photos, and the AI reads them and updates the case.</li>
 <li><strong>Notifications:</strong> tap <strong>Turn On Notifications</strong> in Settings → Case Email to get a ping on your phone when a reply arrives.</li>
 </ul>
+<p>The demo jet isn't signed in, so its Settings show the fields for setting up sync by hand:</p>
 <figure><img src="17-sync.webp" loading="lazy" alt="Sync settings"></figure>
 <figure><img src="18-email.webp" loading="lazy" alt="Email settings"></figure>
 <p>If an email lands on the wrong case, don't import it. Pick the right case in the review sheet first.</p>
@@ -217,16 +241,22 @@ table{display:block;overflow-x:auto}}
 <li><strong>Your company's MEL wins</strong> over the master MEL shown in the app. It may be stricter.</li>
 <li><strong>Enter the serial number.</strong> Wiring and some parts change from one airplane to the next.</li>
 <li><strong>You sign, the app doesn't.</strong> Read every log entry and form before you put your name on it, in ink or on the screen. Check IPC part numbers against the data plate.</li>
-<li><strong>Guard your keys.</strong> Never share access keys in a text, email or photo.</li>
+<li><strong>Guard your keys.</strong> Never share the API key or access keys in a text, email or photo.</li>
 </ol>
 <table><thead><tr><th>Problem</th><th>Quick Fix</th></tr></thead><tbody>
 <tr><td>The AI doesn't answer</td><td>Check the <strong>Anthropic API Key</strong> in Settings and your internet connection</td></tr>
-<tr><td>"Can't reach this connection"</td><td>The access key may have expired. Ask your administrator for a new one</td></tr>
-<tr><td>A case is missing on this device</td><td>Turn on sync, then open <strong>Recent Cases</strong> to pull the latest</td></tr>
+<tr><td>"That invite code is not valid or has expired"</td><td>Invites work once, within 7 days. Ask your administrator for a new one</td></tr>
+<tr><td>"This passkey is not registered with Avio.AI"</td><td>Your technician account was removed, or the passkey belongs to another site. Ask your administrator for a new invite and join again</td></tr>
+<tr><td>The app asks for the API key every time</td><td>Use the Home Screen app, not Safari, and tick <strong>Remember keys on this device</strong></td></tr>
+<tr><td>A "sign in again" note</td><td>Your sign-in ran out or was switched off. Tap the note, then <strong>Sign In With Passkey</strong>. Still stuck? Ask your administrator</td></tr>
+<tr><td>"Can't reach this connection"</td><td>For a connection set up by hand, the access key may have expired. Ask your administrator for a new one</td></tr>
+<tr><td>A case is missing on this device</td><td>Make sure sync is on, then open <strong>Recent Cases</strong> to pull the latest</td></tr>
 <tr><td>Wiring looks wrong for this airplane</td><td>Check the serial number on the Mx Magic tab or in Search → Wiring</td></tr>
 <tr><td>Working where there's no signal</td><td>Tap <strong>Download Data For Offline Use</strong> in Settings before you leave Wi-Fi</td></tr>
 <tr><td>A red "Not saved on this device" banner</td><td>Your phone's storage for the app is full. Keep the app open, delete old cases, or turn on sync so your cases are kept in the cloud too</td></tr>
 <tr><td>A yellow "New data is available" note</td><td>Your company updated the aircraft data. Tap the note to load it when you reach a good stopping point. The app waits for you instead of reloading in the middle of your work</td></tr>
+<tr><td>"Still loading… Tap to reload"</td><td>Start-up got stuck. Tap the note to reload. If it keeps happening, close the app completely (swipe it away) and open it again</td></tr>
+<tr><td>"This device's saved cases could not be opened"</td><td>The phone's browser storage didn't answer. Close the app completely and open it again. Until then, new work is kept in a small backup store</td></tr>
 <tr><td>Something else is weird</td><td>Close the app, reopen it, then ask your administrator. Turning it off and on again is a classic for a reason</td></tr>
 </tbody></table>
 </body></html>
