@@ -11,7 +11,10 @@
 // Nothing else is opened beyond the headers needed to decide. Access to every mailbox is read-only.
 //
 // Bindings (wrangler.toml / dashboard):  KV namespace MAIL
-// Secrets: GITHUB_TOKEN                             (fine-grained, Contents: Read and write on the cases repo)
+//          BROKER  (optional, recommended): service binding to avio-broker, entrypoint MailToken. The watcher then gets a
+//                  one-hour GitHub App token for the cases repo from the access service, so there is no token to renew.
+// Secrets: GITHUB_TOKEN                             (only without the BROKER binding, or as its fallback: fine-grained,
+//                                                    Contents: Read and write on the cases repo)
 //          CASES_REPO                               (owner/name)
 //          SETUP_KEY                                (a long random string; the app sends it to talk to this worker)
 //          GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET   (for Google mailboxes: OAuth web client, Gmail read-only scope)
@@ -97,7 +100,8 @@ export default {
         const cfg = await getCfg(env), B = await boxes(env), S = await getState(env, B);
         const list = B.map(b => ({ id: b.id, kind: b.kind, email: b.email, last: S.last[b.id] || 0, error: S.err[b.id] || '' }));
         return json({ boxes: list, gmail: (list.find(b => b.kind === 'google') || {}).email || null, google: !!env.GOOGLE_CLIENT_ID, microsoft: !!env.MS_CLIENT_ID,
-          last: Math.max(0, ...list.map(b => b.last)), lastError: Object.values(S.err).join(' · '), vapid: (await vapidKeys(env)).pub, subs: (await getJ(env, 'subs', [])).length, senders: cfg.senders, tickets: cfg.tickets.length, repo: env.CASES_REPO });
+          last: Math.max(0, ...list.map(b => b.last)), lastError: Object.values(S.err).join(' · '), vapid: (await vapidKeys(env)).pub, subs: (await getJ(env, 'subs', [])).length, senders: cfg.senders, tickets: cfg.tickets.length, repo: env.CASES_REPO,
+          github: env.BROKER && typeof env.BROKER.casesToken === 'function' ? 'access service' : 'GITHUB_TOKEN secret', githubLast: ghAuth, githubError: ghAuthErr });
       }
       if (url.pathname === '/subscribe' && req.method === 'POST') {
         const { subscription } = await req.json();
@@ -315,11 +319,29 @@ async function googleToken(env, params, f = fetch) {
 }
 async function ghPut(env, f, path, b64, message) {
   const u = `https://api.github.com/repos/${env.CASES_REPO}/contents/${path}`;
-  const h = { Authorization: 'Bearer ' + env.GITHUB_TOKEN, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'avio-mail' };
+  const h = { Authorization: 'Bearer ' + await ghToken(env), Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'avio-mail' };
   let sha; const g = await f(u, { headers: h }); if (g.ok) sha = (await g.json()).sha;
   const r = await f(u, { method: 'PUT', headers: { ...h, 'content-type': 'application/json' }, body: JSON.stringify({ message, content: b64, ...(sha ? { sha } : {}) }) });
   if (!r.ok) throw new Error(`Cases repo ${r.status} writing ${path}`);
 }
+// GitHub token for the cases repo: a one-hour token from the access service when the BROKER binding is there (kept
+// until 5 minutes before it expires), else the GITHUB_TOKEN secret. If the access service fails, the secret is the fallback.
+let ghTok = null;
+export async function ghToken(env) {
+  if (env.BROKER && typeof env.BROKER.casesToken === 'function') {
+    if (ghTok && ghTok.repo === env.CASES_REPO && Date.parse(ghTok.expires_at) - Date.now() > 300_000) return ghTok.token;
+    try {
+      const t = await env.BROKER.casesToken(env.CASES_REPO);
+      if (t && t.token) { ghTok = { ...t, repo: env.CASES_REPO }; ghAuth = 'access service'; return t.token; }
+      ghAuthErr = (t && t.error) || 'no token';
+    } catch (e) { ghAuthErr = e && e.message || String(e); }
+    if (!env.GITHUB_TOKEN) throw new Error('Access service: ' + ghAuthErr);
+  }
+  ghAuth = 'GITHUB_TOKEN secret';
+  return env.GITHUB_TOKEN;
+}
+let ghAuth = '', ghAuthErr = '';
+
 const getJ = async (env, k, d) => { try { return JSON.parse(await env.MAIL.get(k)) ?? d } catch (e) { return d } };
 const getCfg = async env => ({ senders: [], tickets: [], ...(await getJ(env, 'cfg', {})) });
 const hdrs = p => Object.fromEntries(((p && p.headers) || []).map(h => [h.name.toLowerCase(), h.value]));
