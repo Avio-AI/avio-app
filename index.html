@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="989e525 2026-11-15">
+<meta name="avio-build" content="6db6c42 2026-11-15">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -5109,7 +5109,7 @@ function mailSettingsBind(){
   const status=async()=>{if(!mwOn()){st('Not set up.');drawBoxes([]);return}
     try{const s=await mwApi('/status');const ta=$('#mwSenders');if(ta&&document.activeElement!==ta)ta.value=(s.senders||[]).join('\n');
       const L=s.boxes||(s.gmail?[{id:'',kind:'google',email:s.gmail,last:s.last}]:[]);drawBoxes(L);
-      st(`${L.length} mailbox${L.length===1?'':'es'} · ${s.subs} phone${s.subs===1?'':'s'} notified · ${s.tickets} ticket${s.tickets===1?'':'s'} watched${s.lastError&&!s.boxes?` · <span style="color:var(--red)">${esc(s.lastError)}</span>`:''}${syOn()?'':' · <span style="color:var(--amber)">turn on case history sync</span>'}`)}catch(e){st(e.message,true)}};
+      st(`${L.length} mailbox${L.length===1?'':'es'} · ${s.subs} phone${s.subs===1?'':'s'} notified · ${s.tickets} ticket${s.tickets===1?'':'s'} watched${s.github?` · saves with ${s.github==='access service'?'the access service (one-hour token)':'its GitHub token'}`:''}${s.githubError?` · <span style="color:var(--red)">access service: ${esc(s.githubError)}</span>`:''}${s.lastError&&!s.boxes?` · <span style="color:var(--red)">${esc(s.lastError)}</span>`:''}${syOn()?'':' · <span style="color:var(--amber)">turn on case history sync</span>'}`)}catch(e){st(e.message,true)}};
   ['mwUrl','mwKey'].forEach(id=>$('#'+id).addEventListener('change',()=>{save();status()}));
   $('#mwSenders').addEventListener('change',async()=>{save();try{await mwApi('/config',{senders:$('#mwSenders').value.split(/[\n,;]+/).map(s=>s.trim()).filter(Boolean)});status()}catch(e){st(e.message,true)}});
   $('#mwGmail').onclick=()=>{save();if(!mwOn()){st('Enter the mail watcher address and key first.',true);return}const c=mwCfg(),base=c.url.replace(/\/+$/,'');const w=window.open('about:blank','_blank');   // opened now (pop-up rules), pointed at the sign-in once the ticket is back
