@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="7c11e25 2026-11-16">
+<meta name="avio-build" content="d7d1780 2026-11-16">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -3890,7 +3890,7 @@ function openPart(id,focus){
     <div class="grid2">${fld('leOnPn','P/N on',p.on.pn)}${fld('leOnSn','S/N on',p.on.sn)}</div>
     <div id="leIpc"></div>
     <div class="field"><label>Release certificate (8130-3 / Form One / EASA Form 1)</label>
-      <div class="phbtns" style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn2 small" id="leCam" type="button"><span class="ms">photo_camera</span>Take Photo</button><button class="btn2 small" id="leLib" type="button"><span class="ms">photo_library</span>Photo Library</button>${p.photo?'<button class="btn2 small" id="leView" type="button"><span class="ms">image</span>View</button>':''}</div>
+      <div class="phbtns" style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn2 small" id="leLib" type="button"><span class="ms">add_a_photo</span>Document Image</button>${p.photo?'<button class="btn2 small" id="leView" type="button"><span class="ms">image</span>View</button>':''}</div>
       <div id="leScan" class="hint" style="margin-top:6px">${p.cert&&p.cert.readAt?`Read ${esc(dmyt(p.cert.readAt))}. Check every field against the certificate.`:'The AI reads the certificate and fills the fields below. Check every one.'}</div></div>
     <div class="grid2">${sel('leForm','Form',[['','—'],...LE_FORMS.map(x=>[x,x])],p.cert.form)}${fld('leTrk','Form tracking no.',p.cert.trk)}</div>
     <div class="grid2"><div class="field"><label>Status / work (block 11)</label><input id="leStatus" list="leStatusL" value="${esc(p.cert.status||'')}" autocomplete="off"><datalist id="leStatusL">${LE_STATUS.map(s=>`<option value="${s}">`).join('')}</datalist></div>${fld('leCertDate','Certificate date',p.cert.date,'DD MMM YYYY')}</div>
@@ -3956,7 +3956,7 @@ function openPart(id,focus){
   rtsText();timesHint();
   // release certificate photo → the AI reads it → fields filled for the technician to check
   const pick=cam=>{const i=document.createElement('input');i.type='file';i.accept='image/*';if(cam)i.setAttribute('capture','environment');i.onchange=()=>{if(i.files&&i.files[0])leScanCert(p,i.files[0])};i.click()};
-  $('#leCam').onclick=()=>pick(true);$('#leLib').onclick=()=>pick(false);if($('#leView'))$('#leView').onclick=()=>lePhotoView(p.photo);
+  $('#leLib').onclick=()=>pick(false); // one button: iOS and Android offer the camera, the photo library and files from itif($('#leView'))$('#leView').onclick=()=>lePhotoView(p.photo);
   $('#leDel').onclick=()=>{const b=$('#leDel');if(!b.dataset.armed){b.dataset.armed='1';b.textContent='Tap Again to Remove';setTimeout(()=>{if(b.isConnected){delete b.dataset.armed;b.textContent='Remove This Transaction'}},4000);return}
     CASE.parts=leParts().filter(x=>x.id!==id);saveCase();$$('#chatLog .partcard').forEach(x=>{if(x.dataset.part===id)x.remove()});openParts()};
   const outBtn=async(btnId,outId,label,fn)=>{read();logSync();p.logText=$('#leLog').value.replace(/\s+$/,'');remember();saveCase();refreshPartCards();const b=$('#'+btnId);b.disabled=true;b.textContent='Creating PDF…';$('#'+outId).innerHTML='';
