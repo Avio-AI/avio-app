@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="da17f47 2026-11-16">
+<meta name="avio-build" content="b0d37de 2026-11-16">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -5768,7 +5768,7 @@ function attachDictation(btn,ta,hint,o){
   if(!btn||!ta)return;o=o||{};const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   const say=t=>{if(!hint)return;hint.textContent=t||'';if(o.hideEmpty)hint.classList.toggle('hidden',!t)};
   if(!SR){btn.onclick=()=>say('Voice dictation is not available in this browser. Tap the microphone on the keyboard instead.');return}
-  let rec=null,on=false,dead=false,base='',finalTxt='',interimTxt='',restarts=0;
+  let rec=null,on=false,dead=false,failed=false,base='',finalTxt='',interimTxt='',restarts=0;
   const join=(a,b)=>!a?b:!b?a:(/\s$/.test(a)?a:a+' ')+b;
   const tidy=t=>t.replace(/\s+/g,' ').replace(/(^|[.!?]\s+)([a-z])/g,(m,p,c)=>p+c.toUpperCase());
   const show=interim=>{ta.value=join(base,tidy(join(finalTxt,interim)));ta.scrollTop=ta.scrollHeight;ta.dispatchEvent(new Event('input',{bubbles:true}))};
@@ -5776,14 +5776,15 @@ function attachDictation(btn,ta,hint,o){
   const start=()=>{
     rec=new SR();rec.lang=navigator.language||'en-US';rec.continuous=true;rec.interimResults=true;
     rec.onresult=e=>{if(dead)return;let interim='';for(let i=e.resultIndex;i<e.results.length;i++){const r=e.results[i];if(r.isFinal)finalTxt=join(finalTxt,r[0].transcript.trim());else interim=join(interim,r[0].transcript.trim())}interimTxt=interim;show(interim);restarts=0};
-    rec.onerror=e=>{if(e.error==='not-allowed'||e.error==='service-not-allowed'){say('Microphone access is blocked. Allow it for this site in Settings, or use the keyboard microphone.');set(false)}
-      else if(e.error!=='no-speech'&&e.error!=='aborted')say('Dictation stopped: '+e.error)};
+    rec.onerror=e=>{if(e.error==='not-allowed'||e.error==='service-not-allowed'){failed=true;say(document.documentElement.classList.contains('native-ios')?'Microphone or speech recognition is off for Avio.AI. Turn both on in iPhone Settings → Avio.AI, or use the keyboard microphone.':'Microphone access is blocked. Allow it for this site in Settings, or use the keyboard microphone.');set(false)}
+      else if(e.error!=='no-speech'&&e.error!=='aborted'){failed=true;say('Dictation stopped: '+e.error)}};
     // phones end recognition after a pause: keep listening until Stop; words still pending when it stops are kept
-    rec.onend=()=>{if(dead){set(false);say('');return}show(interimTxt);interimTxt='';if(on&&restarts++<20){try{base=ta.value;finalTxt='';rec.start();return}catch(e){}}set(false);say('')};
+    // an error message stays up (it used to be cleared at once, so a refused permission only flashed)
+    rec.onend=()=>{if(dead){set(false);if(!failed)say('');return}show(interimTxt);interimTxt='';if(on&&!failed&&restarts++<20){try{base=ta.value;finalTxt='';rec.start();return}catch(e){}}set(false);if(!failed)say('')};
     try{rec.start();say(o.listening||'Listening… tap Stop when you are done.')}catch(e){say('Could not start dictation: '+e.message);set(false)}
   };
   const stop=()=>{if(!on)return;show(interimTxt);interimTxt='';dead=true;set(false);say('');try{rec&&rec.stop()}catch(e){}}; // what was heard so far is in the box now; late results are ignored
-  btn.onclick=()=>{if(on){stop();return}base=ta.value;finalTxt='';interimTxt='';restarts=0;dead=false;set(true);start()};
+  btn.onclick=()=>{if(on){stop();return}base=ta.value;finalTxt='';interimTxt='';restarts=0;dead=false;failed=false;set(true);start()};
   return {stop,active:()=>on};
 }
 {const dd=attachDictation(document.getElementById('dictBtn'),document.getElementById('descText'),document.getElementById('dictHint'));
