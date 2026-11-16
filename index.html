@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="8280296 2026-11-16">
+<meta name="avio-build" content="f877ec9 2026-11-16">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -5840,6 +5840,19 @@ function openTechOps(){
     const j=JSON.stringify(st);if(j!==last){last=j;h.postMessage(st)}
   }catch(e){}};
   setInterval(report,400);document.addEventListener('click',()=>setTimeout(report,50),true);report();
+  // Files the page makes (PDFs, Markdown, log entries) are in-page blob: links, which a web view cannot open in a new
+  // window. Hand them to the app, which shows the iOS share sheet (Save to Files, Mail, AirDrop, Print).
+  const sendFile=async(href,name)=>{
+    try{const b=await (await fetch(href)).blob(),u=new Uint8Array(await b.arrayBuffer());let bin='';
+      for(let i=0;i<u.length;i+=32768)bin+=String.fromCharCode.apply(null,u.subarray(i,i+32768));
+      h.postMessage({download:{name:name||'Avio.AI file',mime:b.type||'application/octet-stream',data:btoa(bin)}})}
+    catch(e){alert('Could not save the file: '+(e.message||e))}};
+  const fileLink=a=>{const href=a&&a.getAttribute&&a.getAttribute('href')||'';return /^(blob:|data:)/.test(href)?href:''};
+  document.addEventListener('click',e=>{const a=e.target&&e.target.closest&&e.target.closest('a');const href=fileLink(a);
+    if(!href)return;e.preventDefault();e.stopPropagation();sendFile(href,a.getAttribute('download'))},true);
+  // programmatic downloads (a.click() on a link that is not on the page)
+  const click0=HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click=function(){const href=fileLink(this);if(href&&!this.isConnected){sendFile(href,this.getAttribute('download'));return}return click0.call(this)};
 })();
 </script>
 </body>
