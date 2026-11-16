@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="15866de 2026-11-16">
+<meta name="avio-build" content="da17f47 2026-11-16">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -5851,6 +5851,17 @@ function openTechOps(){
     const j=JSON.stringify(st);if(j!==last){last=j;h.postMessage(st)}
   }catch(e){}};
   setInterval(report,400);document.addEventListener('click',()=>setTimeout(report,50),true);report();
+  // The Claude key lives in the iOS Keychain, unlocked with Face ID each launch, never in the page's storage. A key
+  // entered in Settings (or saved before) goes to the app, and is wiped from storage once the app confirms it is in
+  // the Keychain (avioNative.keyStored; an older app build never confirms, so it keeps working from storage); the app
+  // hands it back each launch for that session only (avioNative.setKey).
+  let sentKey=null;
+  const wipeKey=()=>{try{const K=store.get('avio_keys',null);if(K&&K.anthropicKey){K.anthropicKey='';store.set('avio_keys',K,cfg.remember)}}catch(e){}};
+  const keyToApp=()=>{const k=cfg.anthropicKey||'';if(k!==sentKey){sentKey=k;h.postMessage({claudeKey:k})}else if(window.__avioKeyStored)wipeKey()};
+  window.avioNative.keyStored=()=>{window.__avioKeyStored=true;wipeKey()};
+  const saveCfg0=saveCfg;saveCfg=function(){const r=saveCfg0.apply(this,arguments);keyToApp();return r};
+  window.avioNative.setKey=k=>{sentKey=k||'';cfg.anthropicKey=k||'';try{renderAiBadge()}catch(e){};report()};
+  if(cfg.anthropicKey)keyToApp();else h.postMessage({needKey:true});
   // Files the page makes (PDFs, Markdown, log entries) are in-page blob: links, which a web view cannot open in a new
   // window. Hand them to the app, which shows the iOS share sheet (Save to Files, Mail, AirDrop, Print).
   const sendFile=async(href,name)=>{
