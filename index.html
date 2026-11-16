@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="2b8c879 2026-11-16">
+<meta name="avio-build" content="d604592 2026-11-16">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -683,6 +683,13 @@ html.sysbar{--safe-b:0px}
 #splash.out{opacity:0;pointer-events:none}
 @keyframes spIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){#splash .wm,#splash .rule{animation:none}#splash{transition:none}}
+</style>
+<style id="nativeIosCss">
+/* Inside the Avio.AI iPhone app (native=ios): the app draws the top bar and the tab bar natively, so the web app's own
+   header row and bottom tabs are hidden; the session name, badges and every screen below stay the web app's. */
+html.native-ios header .hrow,html.native-ios .tabs,html.native-ios body.kb .tabs,html.native-ios body.inchat .tabs{display:none!important}
+html.native-ios header{padding-top:8px}
+html.native-ios #splash{display:none!important}
 </style>
 </head>
 <body>
@@ -5799,6 +5806,40 @@ function openTechOps(){
 {const _rf=renderFollowChips;renderFollowChips=function(){_rf.apply(this,arguments);const box=document.getElementById('followChips');if(!box||box.querySelector('.techops'))return;
   const b=document.createElement('button');b.className='qchip techops';b.type='button';b.innerHTML='<span class="ms">call</span>TechOps';b.onclick=e=>{e.stopPropagation();openTechOps()};box.appendChild(b)};
  try{renderFollowChips()}catch(e){}}
+
+/* ═════════ Avio.AI iPhone app bridge (Option 3: native top bar and tab bar, web screens inside) ═════════
+   Only active when the page is opened by the iPhone app (?native=ios, kept for the session). The native bar calls
+   window.avioNative.*; the page reports what the bar shows (title, AI and data status, current tab, whether a case is
+   open) to the app through webkit.messageHandlers.avio. Nothing here runs in a browser. */
+(function(){
+  let on=false;
+  try{on=/[?&]native=ios\b/.test(location.search)||sessionStorage.getItem('avio_native')==='ios';if(on)sessionStorage.setItem('avio_native','ios')}catch(e){}
+  const h=window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.avio;
+  if(!on||!h)return;
+  document.documentElement.classList.add('native-ios');
+  const click=sel=>{const b=document.querySelector(sel);if(b)b.click()};
+  const inChat=()=>{const c=document.getElementById('chatView');return !!c&&!c.classList.contains('hidden')};
+  window.avioNative={
+    newCase:()=>click('#btnNew'), cases:()=>click('#btnCases'), exportCase:()=>click('#btnExport'),
+    theme:()=>click('#btnTheme'), help:()=>click('#btnHelp'), settings:()=>click('#btnSettings'),
+    aircraft:()=>click('#fleetPick'), aiStatus:()=>click('#aiBadge'),
+    tab:t=>click('.tab[data-tab="'+t+'"]'),
+    back:()=>{if(inChat()&&typeof showIntake==='function')showIntake()}
+  };
+  let last='';
+  const report=()=>{try{
+    const t=(document.getElementById('brandLong')||{}).textContent||'Avio.AI';
+    const ai=document.getElementById('aiBadge'),dot=document.getElementById('dataDot');
+    const onTab=document.querySelector('.tab.on');
+    const st={title:t.trim(),multiType:!!(document.getElementById('fleetCaret')&&!document.getElementById('fleetCaret').classList.contains('hidden')),
+      ai:ai&&ai.classList.contains('ok')?'ok':'off',
+      data:dot?(dot.classList.contains('ok')?'ok':dot.classList.contains('err')?'err':dot.classList.contains('busy')?'busy':'none'):'none',
+      tab:onTab?onTab.dataset.tab:'describe',theme:document.documentElement.getAttribute('data-theme')||'auto',inChat:inChat(),typing:document.body.classList.contains('kb'),
+      caseOpen:!!(typeof CASE!=='undefined'&&CASE&&CASE.msgs&&CASE.msgs.length)};
+    const j=JSON.stringify(st);if(j!==last){last=j;h.postMessage(st)}
+  }catch(e){}};
+  setInterval(report,400);document.addEventListener('click',()=>setTimeout(report,50),true);report();
+})();
 </script>
 </body>
 </html>
