@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="d604592 2026-11-16">
+<meta name="avio-build" content="8280296 2026-11-16">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -5833,7 +5833,8 @@ function openTechOps(){
     const onTab=document.querySelector('.tab.on');
     const st={title:t.trim(),multiType:!!(document.getElementById('fleetCaret')&&!document.getElementById('fleetCaret').classList.contains('hidden')),
       ai:ai&&ai.classList.contains('ok')?'ok':'off',
-      data:dot?(dot.classList.contains('ok')?'ok':dot.classList.contains('err')?'err':dot.classList.contains('busy')?'busy':'none'):'none',
+      data:(typeof dataConnected==='function'&&!dataConnected())?'none':dot?(dot.classList.contains('ok')?'ok':dot.classList.contains('err')?'err':dot.classList.contains('busy')?'busy':'none'):'none',
+      sheet:!!document.querySelector('.backdrop:not(.hidden)'),
       tab:onTab?onTab.dataset.tab:'describe',theme:document.documentElement.getAttribute('data-theme')||'auto',inChat:inChat(),typing:document.body.classList.contains('kb'),
       caseOpen:!!(typeof CASE!=='undefined'&&CASE&&CASE.msgs&&CASE.msgs.length)};
     const j=JSON.stringify(st);if(j!==last){last=j;h.postMessage(st)}
