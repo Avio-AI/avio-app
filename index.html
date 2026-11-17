@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="ae57d7d 2026-11-17">
+<meta name="avio-build" content="51dce29 2026-11-17">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -407,6 +407,8 @@ a.btn2{min-height:40px}
 .mchk label{background:none;border:1px solid var(--border2);border-radius:8px;font-family:var(--sans);font-size:13px;font-weight:500;padding:6px 12px}
 .mchk label:has(input:checked){background:var(--chip-sel);border-color:transparent;color:var(--on-tonal)}
 .mchk input{accent-color:var(--cyan)}
+.mchk .mgrp{flex-basis:100%;display:flex;justify-content:space-between;align-items:baseline;margin:8px 2px 0;font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.mchk .mgrp a{text-transform:none;letter-spacing:0;font-weight:500;color:var(--cyan)}
 details.more summary{font-family:var(--display);font-size:14px;letter-spacing:0;color:var(--cyan);font-weight:500;padding:8px 0}
 .warnnote{color:var(--cas-amber)}
 
@@ -1463,15 +1465,19 @@ function searchShard(sh,q,manuals){
     }
   }
   const phrase=terms.length>1?q.toLowerCase().replace(/["']/g,'').trim():null;
-  const out=[];
+  const out=[],sup=supCodes();
   for(const [i,s] of scores){
-    const cover=hits.get(i).size/terms.length;
-    let sc=s*(0.5+cover)*(MW[DATA.catalog[sh.pages[i][0]].m]||1);
+    const cover=hits.get(i).size/terms.length,dd=DATA.catalog[sh.pages[i][0]];
+    let sc=s*(0.5+cover)*(MW[dd.m]||1);
     if(phrase&&sh.pages[i][3].toLowerCase().includes(phrase))sc*=1.6;
+    // a supplemental document's title is its subject line: words of the query in it count extra
+    if(sup.has(dd.m)){const tl=String(dd.title||'').toLowerCase();sc*=(1+.5*terms.filter(t=>tl.includes(t)).length/terms.length)*(/ — index\b/.test(tl)?.6:1)}
     out.push({sh,i,score:sc,terms});
   }
   return out;
 }
+const isSupKey=k=>k==='sup'||/^sup-/.test(k);
+function supCodes(){return new Set(((PROFILE&&PROFILE.manuals)||[]).filter(x=>x.group).map(x=>x.code))}
 function guessChapters(q,n=3){
   const terms=qtok(q);const sc=new Map();
   const add=(k,v)=>sc.set(k,(sc.get(k)||0)+v);
@@ -1484,7 +1490,7 @@ function guessChapters(q,n=3){
     if(h)add(d.ata.slice(0,2),h*h);
   }
   for(const f of DATA.faults){const mm=(f.msg+' '+(f.cause||'')).toLowerCase();let h=0;for(const t of terms)if(mm.includes(t))h++;if(h>1&&f.ata)add(f.ata.slice(0,2),h*.5)}
-  return [...sc.entries()].sort((a,b)=>b[1]-a[1]).slice(0,n).map(x=>x[0]).filter(k=>DATA.manifest.shards[k]);
+  return [...sc.entries()].sort((a,b)=>b[1]-a[1]).slice(0,n).map(x=>x[0]).filter(k=>DATA.manifest.shards[k]&&!isSupKey(k));
 }
 function citeFor(doc,page,label){
   if(isWiring(doc)){const dia=(doc.dia||[])[page-1];return `${doc.c} sh ${dia||page}`}
@@ -1513,6 +1519,14 @@ async function searchManuals(query,{chapters,manuals,max=8}={}){
   if(!ch.length)ch=Object.keys(DATA.manifest.shards);
   const ms=manuals&&manuals.length?new Set(manuals.map(m=>{const up=String(m).toUpperCase();return MANS.find(x=>x.toUpperCase()===up)||m})):null;
   if(ms&&DATA.catalog.some(d=>d.s==='mel'&&ms.has(d.m))&&DATA.manifest.shards.mel&&!ch.includes('mel'))ch.push('mel');
+  // supplemental documents (manuals with a "group" in profile.json) live in shards sup-<CC> (by ATA chapter) and sup (no chapter):
+  // searched with their chapter, or all of them when only supplemental documents are selected
+  const supK=Object.keys(DATA.manifest.shards||{}).filter(isSupKey);
+  if(supK.length){const sup=supCodes();const want=!ms||[...ms].some(c=>sup.has(c));
+    if(want){if(ms&&[...ms].every(c=>sup.has(c))&&!(chapters&&chapters.length))ch=supK.slice();
+      else{for(const c of ch.slice())if(supK.includes('sup-'+c))ch.push('sup-'+c);if(supK.includes('sup'))ch.push('sup')}}
+    else ch=ch.filter(k=>!isSupKey(k))}
+  ch=[...new Set(ch)];
   const shards=(await Promise.all(ch.map(loadShard))).filter(Boolean);
   let res=[];for(const sh of shards)res.push(...searchShard(sh,query,ms));
   if(WSET&&(!ms||ms.has(WCODE))){const ws=await loadShard('wset');const chs=new Set(ch);
@@ -1853,7 +1867,9 @@ document.addEventListener('click',e=>{const r=e.target.closest('.ddres');if(r)sh
 function systemPrompt(){
   const P=PROFILE,m=DATA.manifest||{},rev=m.revisions||{};
   const has={faults:DATA.faults.length>0,fim:(m.fimChapters||[]).length>0,cmc:(DATA.cmc.messages||[]).length+(DATA.cmc.codes||[]).length>0,wiring:!!m.wiring,mel:!!m.mel,docs:DATA.catalog.length>0};
-  const lib=P.library||P.manuals.map(x=>`- ${x.code}${x.name?' — '+x.name:''}${rev[x.code]?' ('+rev[x.code]+')':''}${x.about?': '+x.about:''}`).join('\n');
+  const mline=x=>`- ${x.code}${x.name?' — '+x.name:''}${rev[x.code]?' ('+rev[x.code]+')':''}${x.about?': '+x.about:''}`;
+  const grp=P.manuals.filter(x=>x.group);
+  const lib=(P.library||P.manuals.filter(x=>!x.group).map(mline).join('\n'))+(grp.length?`\n\n${[...new Set(grp.map(x=>x.group))].map(g=>`${g} (manufacturer bulletins, service changes and letters: search them with search_manuals like any manual, alone with manuals:[codes] or together with the manuals; cite them by document number and page, e.g. [${(grp[0].code)}-001 p1]. They can change or supersede what a manual says: name the document and its date when one bears on the fault):\n`+grp.filter(x=>x.group===g).map(mline).join('\n')).join('\n\n')}`:'');
   const steps=[];const WS=wsets();
   steps.push(`For every fault message given, call lookup_fault to get what the index holds (color, trigger logic, fault code, procedure).${has.fim?' When it returns a procedure id, call get_fim_procedure and work its probable causes in order; check that the tasks it references still match the current maintenance manual revision.':''}${has.cmc?' For every maintenance message or fault code given, call lookup_cmc and read the pages that name it.':''}${P.method?' '+P.method:''}`);
   if(ddOn()){const dm=m.diagnostics;steps.push(`For every fault message, maintenance message / fault code or observed fault, also call lookup_diagnostics (${ddLabel()}${dm.exported?', export dated '+fmtDay(dm.exported):''}). Its known solutions are field-proven fixes ranked by fleet_frequency (how often each one fixed that symptom): weigh them heavily in the differential (highest frequency first, unless this aircraft's evidence argues against it), use their key observations and the troubleshooting steps as discriminating checks, and call lookup_diagnostics with solution_id for the full repair text before recommending one. If it lists no solution, say so. Cite as [${ddCite()} <solution_id>].`)}
@@ -2705,11 +2721,14 @@ function markTerms(text,terms,word,ci){text=String(text||'');const T=[...new Set
 function hlPageText(text,hl){return markTerms(text,(hl||[]).map(x=>x.t),true,false)}
 // ───────── source PDFs: profile.pdf = {branch, repo?, path?, manuals:[…]} — the manual's own PDF (catalog "path") shown at the cited page
 const PDF_CACHE='avio-pdf-v1',PDF_VIEW_KEY='avio_pageview';
-function pdfSrc(d){const P=PROFILE&&PROFILE.pdf;if(!P||!d||!d.path)return null;if(Array.isArray(P.manuals)&&P.manuals.length&&!P.manuals.includes(d.m))return null;
+function pdfSrc(d){const P0=PROFILE&&PROFILE.pdf;if(!P0||!d||!d.path)return null;
+  // profile.pdf.more: [{repo, branch, path, manuals}] for manuals whose PDFs live in another repo (e.g. supplemental documents)
+  const P=(Array.isArray(P0.more)&&P0.more.find(e=>Array.isArray(e.manuals)&&e.manuals.includes(d.m)))||P0;
+  if(P===P0&&Array.isArray(P.manuals)&&P.manuals.length&&!P.manuals.includes(d.m))return null;
   const x=activeSrc();if(!x||x.mode!=='github'||!x.token)return null;
   // catalog paths may use Windows separators; files outside the aircraft folder (..\Shared\x.pdf) sit under _shared/ on the PDF branch
   const rel=String(d.path).replace(/\\/g,'/').replace(/^(\.\.\/)+/,'_shared/').replace(/^\.\//,'');
-  return {repo:P.repo||x.repo,branch:P.branch||x.branch||'main',path:slashDir(P.path||'')+rel,token:x.token}}
+  return {repo:P.repo||x.repo,branch:P.branch||(P.repo&&P.repo!==x.repo?'main':x.branch)||'main',path:slashDir(P.path||'')+rel,token:x.token}}
 let PDFJS_P=null;
 function pdfjs(){return PDFJS_P||(PDFJS_P=import('./vendor/pdf.min.mjs').then(L=>{L.GlobalWorkerOptions.workerSrc='vendor/pdf.worker.min.mjs';window.pdfjsLib=L;return L})   // pdfjs-dist 4 (legacy build: older iPads too)
   .catch(e=>{PDFJS_P=null;console.warn(e);throw new Error('The PDF viewer could not load.')}))}
@@ -4756,8 +4775,15 @@ function fillChapterSelect(){
   const mrank=m=>{const i=(PROFILE.manuals||[]).findIndex(x=>x.code===m);return i<0?99:i};   // chapter names from the first-listed manual (AMM before training)
   for(const d of [...DATA.catalog].sort((a,b)=>mrank(a.m)-mrank(b.m)))if(d.ata&&/-00-00$/.test(d.ata)&&!isWiring(d)){const ch=d.ata.slice(0,2);if(names[ch])continue;const t=String(d.title||'').split('—')[0].trim();if(t)names[ch]=tc(t)}
   const lab=k=>(PROFILE.shardLabels&&PROFILE.shardLabels[k])||(k==='gen'?'General / Front Matter':k==='mel'?'MEL (Dispatch Relief)':/^\d+$/.test(k)?'ATA '+k+(names[k]?' — '+esc(names[k]):''):k.toUpperCase());
-  $('#sChap').innerHTML='<option value="">Auto (Best Match)</option>'+Object.keys(DATA.manifest.shards||{}).sort().map(k=>`<option value="${k}">${lab(k)}</option>`).join('');
-  $('#sManuals').innerHTML=MANS.map(m=>`<label><input type="checkbox" value="${m}" checked> ${m}</label>`).join('');
+  $('#sChap').innerHTML='<option value="">Auto (Best Match)</option>'+Object.keys(DATA.manifest.shards||{}).filter(k=>!isSupKey(k)).sort().map(k=>`<option value="${k}">${lab(k)}</option>`).join('');
+  const box=m=>{const x=PROFILE.manuals.find(y=>y.code===m)||{};return `<label${x.name?` title="${esc(x.name)}"`:''}><input type="checkbox" value="${esc(m)}" checked> ${esc(m)}</label>`};
+  const main=PROFILE.manuals.filter(x=>!x.group).map(x=>x.code),groups=[...new Set(PROFILE.manuals.filter(x=>x.group).map(x=>x.group))];
+  $('#sManuals').innerHTML=main.map(box).join('')+groups.map(g=>`<div class="mgrp"><span>${esc(g)}</span><a href="#" data-g="${esc(g)}">None</a></div>`+PROFILE.manuals.filter(x=>x.group===g).map(x=>box(x.code)).join('')).join('');
+  // each group's link names what it will do: "All" while any type in it is unticked, else "None"
+  const gIns=g=>{const codes=new Set(PROFILE.manuals.filter(x=>x.group===g).map(x=>x.code));return $$('#sManuals input').filter(i=>codes.has(i.value))};
+  const gLab=()=>$$('#sManuals .mgrp a').forEach(a=>a.textContent=gIns(a.dataset.g).some(i=>!i.checked)?'All':'None');
+  $$('#sManuals .mgrp a').forEach(a=>a.onclick=e=>{e.preventDefault();const ins=gIns(a.dataset.g),on=ins.some(i=>!i.checked);ins.forEach(i=>i.checked=on);gLab()});
+  $('#sManuals').onchange=gLab;gLab();
 }
 async function doSearch(){
   const q=$('#sQuery').value.trim();if(!q||!DATA.ready)return;
