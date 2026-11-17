@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="0a839ba 2026-11-17">
+<meta name="avio-build" content="ae57d7d 2026-11-17">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -969,6 +969,10 @@ function saveCfg(){
 const BRK_URL=(()=>{try{return localStorage.getItem('avio_broker_url')||''}catch(e){return ''}})()||'https://avio-broker.gabriel-a7e.workers.dev';
 const bu=b=>{const a=new Uint8Array(b);let t='';for(let i=0;i<a.length;i++)t+=String.fromCharCode(a[i]);return btoa(t).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')},ub=s=>Uint8Array.from(atob(String(s).replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
 const BRK={get s(){return keys.get('brk')},set s(v){keys.set('brk',v)},busy:null};
+// inside the iPhone app passkeys need Associated Domains (paid developer team): until then it signs in with a device code
+const brkNative=()=>document.documentElement.classList.contains('native-ios');
+// a short fingerprint of a key, to notice when the organization changes it without keeping a second copy
+async function keyTag(k){const d=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(k)));return Array.from(d.slice(0,8),b=>b.toString(16).padStart(2,'0')).join('')}
 async function brkCall(path,body,session){
   let r;try{r=await fetch(BRK_URL+path,{method:'POST',headers:{'content-type':'application/json',...(session?{authorization:'Bearer '+session}:{})},body:JSON.stringify(body||{}),cache:'no-store'})}
   catch(e){throw Object.assign(new Error('The Avio.AI sign-in service could not be reached. Check the connection and try again.'),{net:true})}
@@ -989,7 +993,13 @@ async function brkLogin(){
 async function brkApply(session,{first}={}){
   const t=await brkCall('/token',{},session);const exp=x=>x?Date.parse(x.expires_at)||Date.now()+3e6:0;
   const s={session,name:t.user.name,op:t.operator,data:{token:t.data.token,exp:exp(t.data)},cases:t.casesToken?{token:t.casesToken.token,exp:exp(t.casesToken)}:null,cases_repo:t.cases};
-  const was=BRK.s;BRK.s=s;
+  // the organization's Claude API key comes with sign-in (set on the access service's admin page): used when it is new
+  // or changed; in the iPhone app it then goes to the Keychain like a typed key. No key from the organization: the
+  // device keeps its own.
+  const was=BRK.s;
+  if(t.claude&&t.claude.key){s.claudeSeen=await keyTag(t.claude.key);
+    if(!was||was.claudeSeen!==s.claudeSeen||(!cfg.anthropicKey&&!brkNative()))cfg.anthropicKey=t.claude.key}
+  BRK.s=s;
   if(was){for(const k of ['data','cases'])if(was[k]&&was[k].token&&(!s[k]||was[k].token!==s[k].token))BRK_OLD.set(was[k].token,k)}
   const keep=cfg.sources.filter(x=>x.managed!=='brk');
   const mine=t.sources.map(x=>({id:'brk_'+x.repo.replace(/[^\w]/g,'_')+(x.path?'_'+x.path.replace(/[^\w]/g,'_'):''),mode:'github',repo:x.repo,branch:x.branch||'main',path:x.path||'',url:'',token:s.data.token,managed:'brk',name:x.name}));
@@ -1002,13 +1012,17 @@ const BRK_OLD=new Map();
 async function brkRefresh(){
   if(BRK.busy)return BRK.busy;const s=BRK.s;if(!s||!s.session)return false;
   BRK.busy=(async()=>{try{await brkApply(s.session);return true}
-    catch(e){if(e.status===401||e.status===403){brkDrop();notice((e.message||'Sign in again.')+' Tap to open Settings.',()=>openSettings())}return false}
+    catch(e){if(e.status===403)brkDropKey(s);if(e.status===401||e.status===403){brkDrop();notice((e.message||'Sign in again.')+' Tap to open Settings.',()=>openSettings())}return false}
     finally{setTimeout(()=>{BRK.busy=null},0)}})();
   return BRK.busy}
+// the organization's Claude key leaves with the sign-in (sign-out, or switched off); a key typed on the device stays
+async function brkDropKey(s){if(!s||!s.claudeSeen||!cfg.anthropicKey&&!brkNative())return;
+  if(!brkNative()&&await keyTag(cfg.anthropicKey)!==s.claudeSeen)return;   // the technician's own key: keep it
+  cfg.anthropicKey='';saveCfg();try{renderAiBadge()}catch(e){}}   // in the app this empties the Keychain item
 function brkDrop(){const s=BRK.s;if(!s)return;BRK.s=null;
   for(const x of cfg.sources)if(x.managed==='brk')x.token='';saveCfg();
   const c=syCfg();if(s.cases_repo&&c.repo===s.cases_repo){c.token='';sySave(c)}}
-async function brkSignOut(){const s=BRK.s;if(s&&s.session)brkCall('/auth/logout',{},s.session).catch(()=>{});
+async function brkSignOut(){const s=BRK.s;if(s&&s.session)brkCall('/auth/logout',{},s.session).catch(()=>{});await brkDropKey(s);
   brkDrop();cfg.sources=cfg.sources.filter(x=>x.managed!=='brk');if(!activeSrc())cfg.active=(cfg.sources[0]||{}).id||'';applySource();saveCfg();
   const c=syCfg();if(s&&s.cases_repo&&c.repo===s.cases_repo){Object.assign(c,{on:false,token:''});sySave(c)}}
 // every GitHub call goes through here: a token issued by the access service is renewed when due, and a 401 retries once
@@ -1033,16 +1047,20 @@ function brkSettingsHtml(){const s=BRK.s;
     <div class="grid2" style="margin:8px 0 4px"><button class="btn2 small" id="brkAdd"><span class="ms">add_to_home_screen</span>Add Another Device</button><button class="btn2 small" id="brkOut">Sign Out</button></div>
     <div id="brkLink"></div>`
   :`<div class="hint" style="margin-bottom:8px">If your organization uses Avio.AI sign-in, sign in with Face ID or Touch ID instead of entering GitHub tokens.</div>
-    <button class="btn2" id="brkIn" style="width:100%"><span class="ms">passkey</span>Sign In With Passkey</button>
+    ${brkNative()?`<div class="grid2" style="align-items:end"><div class="field" style="margin:0"><label>Device code</label><input id="brkCode" placeholder="ABCDE-FGHJK" autocapitalize="characters" autocomplete="off" spellcheck="false"></div>
+    <button class="btn2" id="brkJoin">Sign In With Code</button></div>
+    <div class="hint" style="margin-top:6px">On a device where you already use Avio.AI (Safari or the Home Screen app), open Settings → Sign In → <b>Add Another Device</b> and enter the code it shows here. Your organization's aircraft, case sync and AI key come with it.</div>`
+    :`<button class="btn2" id="brkIn" style="width:100%"><span class="ms">passkey</span>Sign In With Passkey</button>
     <div class="grid2" style="margin-top:10px;align-items:end"><div class="field" style="margin:0"><label>Invite or device code (first time on this device)</label><input id="brkCode" placeholder="ABCDE-FGHJK" autocapitalize="characters" autocomplete="off" spellcheck="false"></div>
     <button class="btn2" id="brkJoin">Join With Code</button></div>
-    <div class="hint" style="margin-top:6px">Already use Avio.AI on another device? There, open Settings → Sign In → <b>Add Another Device</b> and enter the code it shows here.</div>`}
+    <div class="hint" style="margin-top:6px">Already use Avio.AI on another device? There, open Settings → Sign In → <b>Add Another Device</b> and enter the code it shows here.</div>`}`}
   <div class="hint" id="brkMsg" style="margin-top:6px"></div><hr style="border:none;border-top:1px solid var(--border);margin:14px 0">`}
 function brkWire(){
   const m=t=>{const e=$('#brkMsg');if(e)e.innerHTML=t};const fail=e=>m(`<span style="color:var(--red)">✖ ${esc(e&&e.name==='NotAllowedError'?'Face ID was cancelled or timed out.':(e.message||e))}</span>`);
   const done=async(session,how)=>{m('Getting access…');await brkApply(session,{first:true});m(`<span style="color:var(--green)">✔ ${how}. Opening your aircraft…</span>`);setTimeout(connectFresh,700)};
   if($('#brkIn'))$('#brkIn').onclick=async()=>{try{m('Waiting for Face ID…');await done(await brkLogin(),'Signed in')}catch(e){fail(e)}};
   if($('#brkJoin'))$('#brkJoin').onclick=async()=>{const code=($('#brkCode').value||'').trim();if(!code){m('<span style="color:var(--red)">Enter the invite code from your administrator.</span>');return}
+    if(brkNative()){try{m('Signing in…');await done((await brkCall('/auth/link/claim',{code,device:'iPhone app'})).session,'Signed in')}catch(e){fail(e)}return}
     try{m('Creating your passkey…');await done(await brkJoin(code),'Joined')}catch(e){fail(e)}};
   if($('#brkAdd'))$('#brkAdd').onclick=async()=>{const s=BRK.s;if(!s)return;try{m('Making a code…');const r=await brkCall('/auth/link/start',{},s.session);m('');
     const until=new Date(r.expires_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
@@ -2993,7 +3011,7 @@ function openSettings(note,welcome){
   <hr style="border:none;border-top:1px solid var(--border);margin:14px 0">
   <h3 class="amh">AI Assistant</h3>
   <div class="field"><label>Anthropic API key</label><input id="stKey" type="password" value="${esc(cfg.anthropicKey)}" placeholder="sk-ant-…" autocomplete="off">
-  <div class="hint">Use your organization's own Anthropic account and key. Manual excerpts go to the Anthropic API only while the assistant works a case; Search, MEL and Wiring work without a key.</div></div>
+  <div class="hint">${BRK.s&&BRK.s.claudeSeen?'Your organization provides this key with Avio.AI sign-in, and a new one arrives by itself when it changes. ':''}Use your organization's own Anthropic account and key. Manual excerpts go to the Anthropic API only while the assistant works a case; Search, MEL and Wiring work without a key.</div></div>
   <div class="field"><label>Model</label><select id="stModel">${MODELS.map(([v,l])=>`<option value="${v}" ${cfg.model===v?'selected':''}>${l}</option>`).join('')}</select></div>
   <div class="field">${lbl(`<input type="checkbox" id="stThink" style="width:auto" ${cfg.thinking?'checked':''}> Extended reasoning (slower, more thorough)`)}</div>
   <div class="field"><label>Theme</label><select id="stTheme"><option value="auto" ${(cfg.theme||'auto')==='auto'?'selected':''}>Auto — Follow Phone</option><option value="light" ${cfg.theme==='light'?'selected':''}>Light (Bright Hangar / Ramp)</option><option value="dark" ${cfg.theme==='dark'?'selected':''}>Dark (Night / Cockpit)</option></select></div>
