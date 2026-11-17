@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="3316bb1 2026-11-17">
+<meta name="avio-build" content="6576978 2026-11-17">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -5136,6 +5136,13 @@ function docChips(m){const D=(m.content||[]).filter(b=>b&&b.avio_doc);if(!D.leng
 
 // ───────── settings: mail watcher, mailboxes (Google, Microsoft), notifications
 async function mwEnablePush(){
+  // inside the iPhone app: a web view has no web push, so the app registers with Apple and the watcher sends through
+  // the access service, which holds the app's push key
+  if(window.__avioNativePush){
+    const s=await mwApi('/status');
+    if(!s.apns)throw new Error('This mail watcher cannot notify the iPhone app yet. It needs the current mail/worker.js and the access service binding with the app push key (see mail/README.md).');
+    const t=await window.__avioNativePush();
+    await mwApi('/subscribe',{apns:{token:t.token,sandbox:!!t.sandbox}});return}
   const ios=/iPhone|iPad|iPod/.test(navigator.userAgent),standalone=navigator.standalone||matchMedia('(display-mode: standalone)').matches;
   if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window))throw new Error(ios&&!standalone?'On iPhone, add Avio.AI to the Home Screen and open it from there, then turn on notifications.':'This browser cannot show notifications.');
   const perm=await Notification.requestPermission();if(perm!=='granted')throw new Error('Notifications are not allowed. Allow them for Avio.AI in the phone settings, then try again.');
@@ -5872,6 +5879,13 @@ function openTechOps(){
   const saveCfg0=saveCfg;saveCfg=function(){const r=saveCfg0.apply(this,arguments);keyToApp();return r};
   window.avioNative.setKey=k=>{sentKey=k||'';cfg.anthropicKey=k||'';try{renderAiBadge()}catch(e){};report()};
   if(cfg.anthropicKey)keyToApp();else h.postMessage({needKey:true});
+  // Case-email notifications: the app asks iOS for permission and registers with Apple, then hands the phone's push
+  // token back (avioNative.pushToken); a tapped notification opens that email (avioNative.openInbox)
+  let pushWait=null;
+  window.__avioNativePush=()=>new Promise((res,rej)=>{pushWait={res,rej};h.postMessage({pushRegister:true});
+    setTimeout(()=>{if(pushWait){pushWait=null;rej(new Error('The app did not answer. Update the Avio.AI app, then try again.'))}},30000)});
+  window.avioNative.pushToken=r=>{const w=pushWait;pushWait=null;if(!w)return;if(r&&r.token)w.res(r);else w.rej(new Error(r&&r.error||'Notifications could not be turned on.'))};
+  window.avioNative.openInbox=id=>{IB_LAST=0;ibCheck().then(()=>openInbox(id||undefined))};
   // Files the page makes (PDFs, Markdown, log entries) are in-page blob: links, which a web view cannot open in a new
   // window. Hand them to the app, which shows the iOS share sheet (Save to Files, Mail, AirDrop, Print).
   const sendFile=async(href,name)=>{

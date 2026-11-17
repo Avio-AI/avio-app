@@ -100,11 +100,20 @@ export default {
         const cfg = await getCfg(env), B = await boxes(env), S = await getState(env, B);
         const list = B.map(b => ({ id: b.id, kind: b.kind, email: b.email, last: S.last[b.id] || 0, error: S.err[b.id] || '' }));
         return json({ boxes: list, gmail: (list.find(b => b.kind === 'google') || {}).email || null, google: !!env.GOOGLE_CLIENT_ID, microsoft: !!env.MS_CLIENT_ID,
-          last: Math.max(0, ...list.map(b => b.last)), lastError: Object.values(S.err).join(' · '), vapid: (await vapidKeys(env)).pub, subs: (await getJ(env, 'subs', [])).length, senders: cfg.senders, tickets: cfg.tickets.length, repo: env.CASES_REPO,
+          last: Math.max(0, ...list.map(b => b.last)), lastError: Object.values(S.err).join(' · '), vapid: (await vapidKeys(env)).pub, apns: await apnsReady(env), subs: (await getJ(env, 'subs', [])).length, senders: cfg.senders, tickets: cfg.tickets.length, repo: env.CASES_REPO,
           github: env.BROKER && typeof env.BROKER.casesToken === 'function' ? 'access service' : 'GITHUB_TOKEN secret', githubLast: ghAuth, githubError: ghAuthErr });
       }
       if (url.pathname === '/subscribe' && req.method === 'POST') {
-        const { subscription } = await req.json();
+        const { subscription, apns } = await req.json();
+        if (apns) {   // the iPhone app: an Apple device token, sent through the access service (it holds the app's push key)
+          const token = String(apns.token || '').toLowerCase();
+          if (!/^[0-9a-f]{64,200}$/.test(token)) return json({ error: 'bad device token' }, 400);
+          if (!await apnsReady(env)) return json({ error: 'iPhone notifications need the access service binding (BROKER) with the app push key. See mail/README.md.' }, 400);
+          const subs = (await getJ(env, 'subs', [])).filter(s => s.apns !== token);
+          subs.push({ apns: token, sandbox: !!apns.sandbox, at: Date.now() });
+          await env.MAIL.put('subs', JSON.stringify(subs.slice(-10)));
+          return json({ ok: true, subs: subs.length });
+        }
         if (!subscription || !subscription.endpoint || !subscription.keys) return json({ error: 'bad subscription' }, 400);
         const subs = (await getJ(env, 'subs', [])).filter(s => s.endpoint !== subscription.endpoint);
         subs.push({ endpoint: subscription.endpoint, keys: subscription.keys, at: Date.now() });
@@ -419,9 +428,22 @@ export async function vapidAuth(env, endpoint) {
   const sig = new Uint8Array(await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, enc(h + '.' + p)));
   return `vapid t=${h}.${p}.${b64u(sig)}, k=${v.pub}`;
 }
+// iPhone app: the access service holds the app's push key and passes each notification to Apple (MailToken binding)
+async function apnsReady(env) {
+  if (!env.BROKER) return false;
+  try { return !!(await env.BROKER.apnsReady()); } catch (e) { return false; }   // an access service from before iPhone push
+}
 async function pushAll(env, msg, f = fetch) {
   const subs = await getJ(env, 'subs', []); const keep = []; let sent = 0;
   for (const s of subs) {
+    if (s.apns) {
+      try {
+        const r = await env.BROKER.apnsPush({ token: s.apns, sandbox: !!s.sandbox }, msg);
+        if (r && (r.status === 410 || ['BadDeviceToken', 'Unregistered', 'DeviceTokenNotForTopic'].includes(r.reason))) continue;   // the phone dropped it
+        if (r && r.status === 200) sent++;
+      } catch (e) { }
+      keep.push(s); continue;
+    }
     try {
       const r = await f(s.endpoint, { method: 'POST', headers: { Authorization: await vapidAuth(env, s.endpoint), 'Content-Encoding': 'aes128gcm', 'Content-Type': 'application/octet-stream', TTL: '86400', Urgency: 'high' }, body: await encryptPayload(s, JSON.stringify(msg)) });
       if (r.status === 404 || r.status === 410) continue;   // the phone dropped this subscription
