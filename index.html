@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="890acb3 2026-11-17">
+<meta name="avio-build" content="3316bb1 2026-11-17">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -1884,9 +1884,14 @@ For follow-ups, keep it tight: update the differential and give the next step. U
 
 /* ═════════════════ CLAUDE API (streaming + tool loop) ═════════════════ */
 let ABORT=null; // one controller per AI run (set by runAgent), so Stop also works between API calls
+/* Claude API call: with no signal the browser's own error ("Load failed", "Failed to fetch") said nothing useful */
+async function claudeFetch(opts){
+  try{return await fetch('https://api.anthropic.com/v1/messages',opts)}
+  catch(e){if(e&&e.name==='AbortError')throw e;
+    throw new Error(navigator.onLine===false?'No connection. The AI needs signal; search, manual pages, MEL and wiring still work from the data on this device. Send again when you are back online.':'Could not reach the AI service. Check the connection and send again.')}}
 async function callClaude(body,handlers){
   const ac=ABORT||new AbortController();if(ac.signal.aborted)throw Object.assign(new Error('Stopped.'),{name:'AbortError'});
-  const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',signal:ac.signal,
+  const res=await claudeFetch({method:'POST',signal:ac.signal,
     headers:{'content-type':'application/json','x-api-key':cfg.anthropicKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
     body:JSON.stringify({...body,stream:true})});
   if(!res.ok){let t=await res.text();let msg=t;try{msg=JSON.parse(t).error.message}catch(e){}const err=new Error(`Anthropic API ${res.status}: ${msg}`);err.status=res.status;err.raw=msg;throw err}
@@ -2012,7 +2017,7 @@ function briefTranscript(c){
 }
 let BRIEF_BUSY=null,BRIEF_ERR='';
 async function briefCall(c,model,maxTok){
-  const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':cfg.anthropicKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+  const res=await claudeFetch({method:'POST',headers:{'content-type':'application/json','x-api-key':cfg.anthropicKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
     // newer models reject a forced tool choice, so the brief tool is offered and asked for; a JSON reply in text is also accepted
     body:JSON.stringify({model,max_tokens:maxTok,system:BRIEF_SYS+'\n\nAnswer only by calling the write_brief tool once.',tools:[BRIEF_TOOL],tool_choice:{type:'auto'},
       messages:[{role:'user',content:`Case record:\n\n${briefTranscript(c)}\n\nWrite the case brief as of ${dmyt(new Date())} by calling write_brief.`}]})});
@@ -3975,7 +3980,7 @@ const LE_SCAN_SYS=`You read aviation airworthiness release certificates from a p
 form ("FAA 8130-3", "TCCA Form One", "EASA Form 1", or "Other: <name>"), tracking_no (block 3 form tracking number), organization (block 4, name and city only), work_order (block 5), description (block 7), part_number (block 8), quantity (block 9), serial_number (block 10), status (block 11 exactly as printed, e.g. NEW, OVERHAULED, REPAIRED, INSPECTED/TESTED, MODIFIED), remarks (block 12, verbatim but at most 300 characters), date (block 14e or the release date, as "D MMM YYYY" with the month in capitals, e.g. "21 OCT 2026"), tsn_hours, tsn_cycles, tso_hours, tso_cycles (only if printed in the remarks), legible ("yes", or a list of the blocks you could not read).
 Copy characters exactly. If a value is missing or not legible use "". Never guess a part number, serial number, date or time.`;
 async function leAsk(model,image){
-  const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':cfg.anthropicKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+  const res=await claudeFetch({method:'POST',headers:{'content-type':'application/json','x-api-key':cfg.anthropicKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
     body:JSON.stringify({model,max_tokens:1500,system:LE_SCAN_SYS,messages:[{role:'user',content:[image,{type:'text',text:'Read this release certificate.'}]}]})});
   if(!res.ok){let m=await res.text();try{m=JSON.parse(m).error.message}catch(e){}const err=new Error(`Anthropic API ${res.status}: ${m}`);err.status=res.status;throw err}
   const j=await res.json();if(CASE&&CASE.usage&&j.usage){CASE.usage.in=(CASE.usage.in||0)+(j.usage.input_tokens||0);CASE.usage.out=(CASE.usage.out||0)+(j.usage.output_tokens||0)}
@@ -5031,7 +5036,7 @@ async function ibMatch(it){
   if(!cfg.anthropicKey)return null;
   const recent=all.filter(x=>x.c.status!=='closed').sort((a,b)=>(b.c.updated||0)-(a.c.updated||0)).slice(0,15);if(!recent.length)return null;
   const list=recent.map((x,i)=>`${i+1}. ${pfxName(x.pfx)} · ${caseListLabel(x.c)} · ${x.c.title||''}${x.c.brief?' · '+x.c.brief.headline:''}`).join('\n');
-  try{const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':cfg.anthropicKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+  try{const res=await claudeFetch({method:'POST',headers:{'content-type':'application/json','x-api-key':cfg.anthropicKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
       body:JSON.stringify({model:briefModel(),max_tokens:200,system:'You match an email to the aircraft troubleshooting case it belongs to. Reply with JSON only: {"n": <case number or 0 if none fits>, "why": "<8 words>"}',
         messages:[{role:'user',content:`Open cases:\n${list}\n\nEmail from ${it.fromName||''} <${it.from||''}>\nSubject: ${it.subject||''}\n\n${String(it.text||'').slice(0,3000)}`}]})});
     if(!res.ok)return null;const j=await res.json();const t=(j.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');const o=JSON.parse((t.match(/\{[\s\S]*\}/)||['{}'])[0]);
@@ -5685,7 +5690,7 @@ Rules:
 - Leave out the form's header fields (location, date, times, cycles, registration, serial number), and its signature, initials, "By:" and certificate lines: the app adds its own.`;
 async function ckxConvert(b64,name){
   if(!cfg.anthropicKey)throw new Error('Converting a PDF needs the AI key (Settings → AI).');
-  const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':cfg.anthropicKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+  const res=await claudeFetch({method:'POST',headers:{'content-type':'application/json','x-api-key':cfg.anthropicKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
     body:JSON.stringify({model:cfg.model,max_tokens:16000,messages:[{role:'user',content:[{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}},{type:'text',text:CKX_PROMPT+`\n\nThe file is named "${name}".`}]}]})});
   if(!res.ok){let m=await res.text();try{m=JSON.parse(m).error.message}catch(e){}throw new Error(`Anthropic API ${res.status}: ${m}`)}
   const j=await res.json();return (j.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n').trim()}
@@ -5848,7 +5853,7 @@ function openTechOps(){
     const ai=document.getElementById('aiBadge'),dot=document.getElementById('dataDot');
     const onTab=document.querySelector('.tab.on');
     const st={title:t.trim(),multiType:!!(document.getElementById('fleetCaret')&&!document.getElementById('fleetCaret').classList.contains('hidden')),
-      ai:ai&&ai.classList.contains('ok')?'ok':'off',
+      ai:navigator.onLine===false?'offline':ai&&ai.classList.contains('ok')?'ok':'off',
       data:(typeof dataConnected==='function'&&!dataConnected())?'none':dot?(dot.classList.contains('ok')?'ok':dot.classList.contains('err')?'err':dot.classList.contains('busy')?'busy':'none'):'none',
       sheet:!!document.querySelector('.backdrop:not(.hidden)'),
       tab:onTab?onTab.dataset.tab:'describe',theme:document.documentElement.getAttribute('data-theme')||'auto',inChat:inChat(),typing:document.body.classList.contains('kb'),
