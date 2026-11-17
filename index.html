@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="e59727d 2026-11-17">
+<meta name="avio-build" content="9d6f4eb 2026-11-17">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -5870,7 +5870,7 @@ function openTechOps(){
       sheet:!!document.querySelector('.backdrop:not(.hidden)'),
       tab:onTab?onTab.dataset.tab:'describe',theme:document.documentElement.getAttribute('data-theme')||'auto',inChat:inChat(),typing:document.body.classList.contains('kb'),
       caseOpen:!!(typeof CASE!=='undefined'&&CASE&&CASE.msgs&&CASE.msgs.length),
-      bg:edgeBg(1),bgBottom:edgeBg(innerHeight-2)}; // the colours at the page's top and bottom edges: the app paints them behind its bars
+      bg:edgeBg(1),bgBottom:edgeBg(innerHeight-2),booted:!!(typeof BOOT!=='undefined'&&BOOT.done)}; // the colours at the page's top and bottom edges: the app paints them behind its bars
     const j=JSON.stringify(st);if(j!==last){last=j;h.postMessage(st)}
   }catch(e){}};
   setInterval(report,400);document.addEventListener('click',()=>setTimeout(report,50),true);report();
