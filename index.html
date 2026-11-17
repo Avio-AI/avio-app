@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="9d6f4eb 2026-11-17">
+<meta name="avio-build" content="0a839ba 2026-11-17">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -2987,6 +2987,8 @@ function openSettings(note,welcome){
   <div class="hint hidden" id="stManaged" style="margin:-4px 0 10px">This connection comes from Avio.AI sign-in. Its access renews by itself; sign out above to remove it.</div>
   <button class="btn2 small danger hidden" id="stSrcDel" style="margin:4px 0 10px">Remove This Connection</button>
   ${cfg.sources.some(x=>x.mode==='github'||x.mode==='url')?'<button class="btn2 small" id="stShareSetup" style="margin:4px 0 10px 8px"><span class="ms">share</span>Share Setup Link</button>':''}
+  <div class="field" style="margin-top:4px"><label>Setup link from another device</label><div style="display:flex;gap:8px"><input id="stSetupIn" placeholder="Paste a setup link (Share Setup Link on the other device)" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" style="flex:1"><button class="btn2 small" id="stSetupGo" type="button">Open</button></div>
+    <div class="hint" id="stSetupMsg">Adds that device's aircraft data connections here. In the iPhone app this is the way in: a link tapped elsewhere opens in Safari.</div></div>
   <div id="stDemoNote" class="hint">The demo aircraft uses invented manuals, fault messages, wiring and MEL items so you can try every feature. None of it is real maintenance data.</div>
   <hr style="border:none;border-top:1px solid var(--border);margin:14px 0">
   <h3 class="amh">AI Assistant</h3>
@@ -3015,6 +3017,10 @@ function openSettings(note,welcome){
     $('#stSrcDel').classList.toggle('hidden',id==='__new'||mg);$('#stManaged').classList.toggle('hidden',!mg);
     for(const k of ['stMode','stRepo','stBranch','stPath','stTok'])$('#'+k).disabled=mg;$('#stTok').closest('.field').classList.toggle('hidden',mg);sync()};
   $('#stSrc').onchange=fill;{const b=$('#stShareSetup');if(b)b.onclick=openShareSetup}
+  // a pasted setup link: same as opening it (hashchange → openSetup); only the #setup= part is used
+  $('#stSetupGo').onclick=()=>{const v=$('#stSetupIn').value.trim(),m=v.match(/#(setup=[A-Za-z0-9_-]+)/);
+    if(!m){$('#stSetupMsg').innerHTML='<span style="color:var(--red)">That is not a setup link. On the other device use Settings → Share Setup Link → Copy Link.</span>';return}
+    if(location.hash==='#'+m[1])location.hash='';location.hash=m[1]};
   const collect=()=>{syFromSettings();Object.assign(cfg,{anthropicKey:$('#stKey').value.trim(),model:$('#stModel').value,thinking:$('#stThink').checked,remember:$('#stRemember').checked});
     const sel=$('#stSrc').value,mode=$('#stMode').value;
     const was=cfg.sources.find(y=>y.id===sel);
