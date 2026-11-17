@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="d7d1780 2026-11-16">
+<meta name="avio-build" content="b2d9d13 2026-11-17">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -389,6 +389,8 @@ select{appearance:none;-webkit-appearance:none;background-image:linear-gradient(
 .btn:active{background:var(--amber-glow)}
 .btn.small{height:40px;padding:0 18px;font-size:14px;font-weight:500;border-radius:100px}
 .btn2{border:1px solid var(--border2);color:var(--cyan);background:none;border-radius:100px;font-family:var(--display);font-weight:500;font-size:14px;padding:0 18px;min-height:40px}
+/* a button with an icon: icon and words centred on one line (the icon used to sit high, on the text baseline) */
+.btn:has(>.ms),.btn2:has(>.ms){display:inline-flex;align-items:center;justify-content:center;gap:8px}.btn:has(>.ms)>.ms,.btn2:has(>.ms)>.ms{margin:0;font-size:20px}
 .btn2:hover{background:var(--hover)}
 .btn2.small{min-height:32px;padding:0 14px;font-size:13px}
 .btn2.danger{border-color:var(--border2);color:var(--red)}
