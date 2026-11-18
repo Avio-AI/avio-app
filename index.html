@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="51dce29 2026-11-17">
+<meta name="avio-build" content="5a6ecc9 2026-11-18">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -5902,7 +5902,9 @@ function openTechOps(){
     theme:()=>click('#btnTheme'), help:()=>click('#btnHelp'), settings:()=>click('#btnSettings'),
     aircraft:()=>click('#fleetPick'), aiStatus:()=>click('#aiBadge'),
     tab:t=>click('.tab[data-tab="'+t+'"]'),
-    back:()=>{if(inChat()&&typeof showIntake==='function')showIntake()}
+    // Back leaves the case the way the web app's New Case does: the case is saved and closed, the form and the session
+    // name start empty (only switching screens left the old case open, its title in the session name field)
+    back:()=>{if(inChat())click('#btnNew')}
   };
   // the solid background colour showing at the left edge at height y (the first opaque one up the element tree)
   const edgeBg=y=>{let e=document.elementFromPoint(2,Math.max(0,y));
