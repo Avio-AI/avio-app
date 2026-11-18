@@ -89,8 +89,8 @@ table{display:block;overflow-x:auto}}
 <figure class="strip"><img src="02b-tabs.webp" loading="lazy" alt="Tabs"></figure>
 <table><thead><tr><th>Tab</th><th>What It's For</th><th>Needs the AI Key?</th></tr></thead><tbody>
 <tr><td><strong>Mx Magic</strong></td><td>Tell the app what's wrong and start a troubleshooting case</td><td>Yes</td></tr>
-<tr><td><strong>RTS</strong> (Return To Service)</td><td>Keep a case's paperwork in one place: part swaps, the discrepancy log, MEL relief and deferrals, log entries and repair tags</td><td>No</td></tr>
-<tr><td><strong>PFI</strong></td><td>Fill in a checklist, initial each line, sign it and save a one-page PDF</td><td>No</td></tr>
+<tr><td><strong>RTS</strong> (Return To Service)</td><td>Keep a case's paperwork in one place: part swaps, the discrepancy log, MEL relief and deferrals, log entries, repair tags, and the PFI checklists</td><td>No</td></tr>
+<tr><td><strong>WO</strong> (Work Order)</td><td>Follow every line item of a service-center visit or a downtime at home base: status, hours and cost</td><td>To import a work order or read a progress email</td></tr>
 <tr><td><strong>Search</strong></td><td>Two tools behind one switch. <strong>Manuals</strong>: type words, part names or chapter numbers and read the matching pages. <strong>Wiring</strong>: look up a connector, see which wire goes to which pin, and follow a wire end to end</td><td>No</td></tr>
 </tbody></table>
 <p>Here's the <strong>Search</strong> tab after a search for "temperature sensor". The switch at the top flips between Manuals and Wiring, and the app remembers whichever one you used last:</p>
@@ -152,6 +152,7 @@ table{display:block;overflow-x:auto}}
 <li><strong>MEL</strong>: look up relief and defer, as above.</li>
 <li><strong>Log Entry</strong>: one component log entry per transaction.</li>
 <li><strong>Repair tag</strong>: one tag per removed part, when your company has its tag set up.</li>
+<li><strong>PFI</strong>: your company's checklists (see below).</li>
 </ul>
 <p>A small number next to a section says how many are in it, and the app remembers which sections you keep open.</p>
 <figure><img src="38-docs.webp" loading="lazy" alt="The RTS tab"></figure>
@@ -172,15 +173,27 @@ table{display:block;overflow-x:auto}}
 <p><strong>Part numbers from the IPC:</strong> if your company's data includes the IPC (Illustrated Parts Catalog), the Component Log Entry looks up the part name you type and drops the best match into the empty P/N boxes. It searches your job's own chapter first, so a hose from the water system doesn't get mixed up with one from an engine. Each match shows the part number, its name and the IPC page. Tap a match to use it, or tap the page button to read the IPC page with the part number highlighted, then tap <strong>‹ Log Entry</strong> to come right back with everything you typed still there. Already typed a P/N? The app checks it in the IPC and puts a ✔ on it when it's listed.</p>
 <p>The IPC lists the part numbers that are approved, not the one that's actually bolted to your airplane. Always check the P/N against the data plate and fix the box if it's different. The robot reads catalogs; you read data plates.</p>
 <figure><img src="33-le-ipc.webp" loading="lazy" alt="Component Log Entry with IPC part numbers"></figure>
-<p><strong>Signing the log entry:</strong> near the bottom, under <strong>Work Performed By: Signature</strong>, sign with your finger. Or tap <strong>Import Signature</strong> to use a photo of your signature on white paper, or <strong>Use My Saved Signature</strong> if you've saved one before (on the PFI tab, for example). <strong>Clear</strong> starts over. When you tap <strong>Create Log Entry PDF</strong>, your signature lands on the Work Performed By line. Leave it blank and you sign the printout in ink, the old-fashioned way. If your company's repair tag has a signature box, the repair tag section gets its own <strong>Authorized Signature</strong> pad that works the same way.</p>
+<p><strong>Signing the log entry:</strong> near the bottom, under <strong>Work Performed By: Signature</strong>, sign with your finger. Or tap <strong>Import Signature</strong> to use a photo of your signature on white paper, or <strong>Use My Saved Signature</strong> if you've saved one before (on a PFI checklist, for example). <strong>Clear</strong> starts over. When you tap <strong>Create Log Entry PDF</strong>, your signature lands on the Work Performed By line. Leave it blank and you sign the printout in ink, the old-fashioned way. If your company's repair tag has a signature box, the repair tag section gets its own <strong>Authorized Signature</strong> pad that works the same way.</p>
 <figure><img src="34-le-sign.webp" loading="lazy" alt="Signing the log entry"></figure>
 <p><strong>The discrepancy log</strong> (your company's form, from the RTS tab or during a case) works the same way. Open <strong>Corrective Action, Parts, Return To Service</strong>, type the <strong>Part Name (IPC Look Up)</strong>, and the P/N boxes fill in from the IPC. During a case, the discrepancy log and the Component Log Entry share one set of part and serial numbers, so change one and the other follows along. The form also has two signature pads: <strong>Deferred By: Signature</strong> for the deferral and <strong>Corrective Action: Signature</strong> for the fix. If your company's form has no spot set up for a signature, the app tells you, and you sign the printout.</p>
 <figure><img src="35-amdl-ipc-sign.webp" loading="lazy" alt="Discrepancy log with IPC lookup and signature"></figure>
 
-<h2>Checklists on the PFI Tab</h2>
-<p>The PFI tab (short for pre-flight inspection, though it holds all your company's checklists) turns your company's checklists into tap-to-initial lists, then makes a neat one-page PDF. No more coffee rings on the walk-around card. The tab is always there, even before your company adds a checklist, because you can import your own (see below).</p>
+<h2>Work Orders on the WO Tab</h2>
+<p>When the airplane is at a service center, or down at home base for a week of maintenance, lots of jobs run at once. The <strong>WO</strong> tab keeps them all on one list, so nobody has to ask "is the tire done yet?" for the third time today.</p>
 <ol>
-<li>Open <strong>PFI</strong> and pick a checklist at the top, like <strong>Post-Flight</strong>, <strong>Pre-Flight</strong> or <strong>CBs</strong> (circuit breakers). The title, the list buttons and the progress bar stay pinned at the top while you scroll, so you never lose your place. <strong>Edit</strong> and <strong>Import</strong> live up there too (more on those below).</li>
+<li>Tap <strong>WO</strong>, then <strong>Import Work Order</strong> and choose the work order PDF, or photos of its pages. Claude lists every line item with its number, status, hours and cost. Check them against the paper, untick anything that shouldn't be there, tick <strong>I checked these items</strong>, and tap <strong>Create Work Order</strong>. No paper yet? Tap <strong>Start Blank</strong> instead.</li>
+<li>The top card shows the progress bar, how many items are done, and the totals for estimated hours, actual hours and cost. The buttons under it filter the list: <strong>Not Done</strong>, <strong>Waiting Parts</strong>, <strong>Mine</strong> and so on.</li>
+<li>Tap an item to open it. Change its <strong>Status</strong> (Open, In Work, Waiting Parts, Waiting Approval, Complete, Deferred, Cancelled), fill in the hours and cost, put your name on it, and add a note. It saves as you type.</li>
+<li>Found something new? Tap <strong>Add Item</strong>. Type one item per line to add several at once; start a line with a number ("12 Replace left main tire") to give it that item number.</li>
+<li>An item that needs real troubleshooting? Open it and tap <strong>Troubleshoot in Mx Magic</strong>. The case form comes filled in, and the new case stays linked to the item, so next time the button says <strong>Open Case</strong>.</li>
+</ol>
+<p><strong>The daily progress email:</strong> tap the pencil on the work order and fill in <strong>Progress Emails From</strong> with the service center's address (or just <strong>@theirdomain.com</strong>). The case email watcher then files their emails, and any email with the WO number in its subject. In <strong>Case Email</strong>, tap <strong>Review WO Updates</strong>: Claude reads the report and lists the changes it found, like "Item 7: In Work → Complete, 3.5 h". Untick anything you don't agree with and tap <strong>Apply</strong>. Nothing changes until you say so.</p>
+<p><strong>History:</strong> every change, by whom and when, whether it came from the work order, an email or a technician, is under <strong>History</strong> at the bottom. Work orders sync to every device on the aircraft, like cases. When the airplane is back, tap <strong>Close Work Order</strong>.</p>
+
+<h2>Checklists in the RTS Tab (PFI)</h2>
+<p>The <strong>PFI</strong> section at the bottom of the RTS tab (short for pre-flight inspection, though it holds all your company's checklists) turns your company's checklists into tap-to-initial lists, then makes a neat one-page PDF. No more coffee rings on the walk-around card. The section is always there, even before your company adds a checklist, because you can import your own (see below).</p>
+<ol>
+<li>Open <strong>RTS</strong>, expand <strong>PFI</strong>, and pick a checklist at the top, like <strong>Post-Flight</strong>, <strong>Pre-Flight</strong> or <strong>CBs</strong> (circuit breakers). The title, the list buttons and the progress bar stay pinned at the top while you scroll, so you never lose your place. <strong>Edit</strong> and <strong>Import</strong> live up there too (more on those below).</li>
 <li>Fill in the <strong>Aircraft</strong> box: date, tail number, serial number and times. Type <strong>Your Initials</strong> once, in the last box, right next to <strong>APU Hours</strong>.</li>
 <li>Tap a line to initial it. Tap again for <strong>N/A</strong>. Tap a third time to clear it. Some lines have <strong>L</strong> and <strong>R</strong> boxes for the left and right sides, and some have boxes for numbers, like tire pressure.</li>
 <li>On servicing lines, type what you found and what you put in (or drained) in the <strong>Added</strong> boxes. That way the amount of oil you added ends up on the record, not just on your sleeve.</li>
@@ -189,7 +202,7 @@ table{display:block;overflow-x:auto}}
 <li>Tap <strong>Save &amp; Start New</strong>, then tap it again to confirm. The finished checklist goes into History and you get a fresh copy.</li>
 </ol>
 <p>The bar at the top counts what's done ("2 of 9 initialed"), like a progress bar in a video game, except the prize is an airworthy airplane.</p>
-<figure><img src="19-checks-top.webp" loading="lazy" alt="PFI tab"></figure>
+<figure><img src="19-checks-top.webp" loading="lazy" alt="PFI checklists"></figure>
 <figure><img src="20-checks-items.webp" loading="lazy" alt="Checklist lines"></figure>
 <p>Servicing lines have a box for the reading and an <strong>Added</strong> box for what you put in:</p>
 <figure><img src="24-checks-servicing.webp" loading="lazy" alt="Servicing checklist"></figure>
@@ -200,7 +213,7 @@ table{display:block;overflow-x:auto}}
 <figure><img src="28-cb-add.webp" loading="lazy" alt="Add CB / SSPC"></figure>
 <p>Here's the finished PDF. Only the lines you initialed or marked N/A are filled in:</p>
 <figure class="pdfpic"><img src="23-checks-pdf.webp" loading="lazy" alt="Exported checklist"></figure>
-<p><strong>History:</strong> tap <strong>History</strong> at the top of the PFI tab to see every checklist saved for this aircraft, with the tail number, date, how far along it is and who initialed it. Tap <strong>Open</strong> to keep working on one or export it again. Tap <strong>✕</strong> twice to delete one.</p>
+<p><strong>History:</strong> tap <strong>History</strong> at the top of the PFI section to see every checklist saved for this aircraft, with the tail number, date, how far along it is and who initialed it. Tap <strong>Open</strong> to keep working on one or export it again. Tap <strong>✕</strong> twice to delete one.</p>
 <figure><img src="25-checks-history.webp" loading="lazy" alt="Checklist History"></figure>
 <p><strong>Two technicians, one checklist:</strong> with case sync on (it's on automatically when you sign in with a passkey), checklists are shared too. A teammate on another phone opens the same checklist from History, adds their initials and signs, and the PDF gets a signature row for each of you. With sync off, the checklist stays on your phone. The note under the signature box tells you which one you have.</p>
 <p><strong>Fixing a checklist:</strong> spot a typo or a missing line? Tap <strong>Edit</strong> at the top of any checklist. Every line shows up as plain text you can reword, add or delete. Tick <strong>I checked every line of this checklist</strong>, then tap <strong>Save Changes</strong>. With sync on, the fix reaches every technician on this aircraft type. With sync off, it stays on your phone. Changed your mind? <strong>Restore the Data Set Version</strong> (tap it twice) puts your company's original back.</p>
