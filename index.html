@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="c730e9b 2026-11-18">
+<meta name="avio-build" content="3019882 2026-11-18">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -5456,16 +5456,42 @@ function woAddItems(w){
     w.items.push(...add);woSave(w,add.map(i=>`Item ${i.n} added: ${i.t.slice(0,60)}`));hideModal();WO_FILTER='all';renderWO()}}
 
 // ───────── import a work order (PDF or photos): Claude lists the items, the technician checks them
-const WO_PROMPT=`You read an aircraft maintenance work order (the attached pages) and list its line items for a maintenance tracking app. Reply with JSON only, nothing before or after it:
-{"wo":{"num":"","title":"","reg":"","sn":"","loc":"","start":"","rts":"","contact":""},"items":[{"n":"","t":"","ata":"","st":"open","est":null,"act":null,"cost":null}]}
+const WO_PROMPT=`You read an aircraft maintenance work order, due list or work package (the attached pages) and list its line items for a maintenance tracking app.
+Reply in this plain-text format and nothing else. First one header line, then one line per item:
+WO|num|title|reg|sn|loc|start|rts|contact
+ITEM|n|t|ata|st|est|act|cost|note
+The | character only separates fields (write / for a | inside the text); an unknown field is left empty.
 
 Rules:
-- One entry in "items" for every line item, squawk, task or discrepancy on the work order: none left out, none added, none merged. Keep the order printed.
-- n: the item number exactly as printed (empty if none). t: the item's description as printed, on one line; leave out boilerplate repeated on every item.
+- One ITEM line for every line item, squawk, task, inspection or discrepancy: none left out, none added, none merged. Keep the printed order. A due list or forecast counts: each due inspection, task or component is an item.
+- n: the item, task or card number exactly as printed. t: the description as printed, on one line; leave out boilerplate repeated on every item.
 - ata: the ATA chapter only when printed.
-- st, from the printed status words: open (default), work (in progress, started), parts (awaiting parts, on order), appr (awaiting approval, quoted, pending customer), done (complete, closed, signed off), def (deferred), cxl (cancelled, void, not authorized).
-- est: estimated or quoted hours as a number; act: actual or billed hours as a number; cost: the item's total amount (labor plus parts) as a number without currency symbols. Only when printed; otherwise null.
-- wo: num = the work order number; title = what the visit is (e.g. the inspection name); reg = registration; sn = aircraft serial number; loc = the facility; start = arrival or open date; rts = promised completion or return-to-service date; contact = the service center contact. Dates as printed. Leave unknown fields empty.`;
+- st, from the printed status words: open (default), work (in progress, started), parts (awaiting parts, on order), appr (awaiting approval, quoted, pending customer), done (complete, closed, signed off, complied with), def (deferred), cxl (cancelled, void, not authorized).
+- est: estimated or quoted hours as a plain number; act: actual or billed hours; cost: the item's total amount (labor plus parts) as a plain number without currency symbols or commas. Only when printed.
+- note: anything else printed that a technician needs, short: due date, hours or cycles remaining, interval, part number.
+- Header: num = the work order or document number; title = what it is (e.g. the inspection name, or "Due List"); reg = registration; sn = aircraft serial number; loc = the facility; start = open date; rts = promised completion or return-to-service date; contact = the service center contact. Dates as printed.`;
+// Claude's text reply; a reply cut off by its length limit is continued after the last complete line (long due lists)
+async function woAskText(content,max){if(!cfg.anthropicKey)throw new Error('Reading a work order needs the AI key (Settings → AI).');
+  let text='';
+  for(let round=0;round<6;round++){
+    const msgs=[{role:'user',content}];
+    if(text){const done=text.slice(0,text.lastIndexOf('\n')+1);text=done;const last=(done.trim().split('\n').pop()||'').split('|').slice(0,2).join('|');
+      msgs.push({role:'assistant',content:done.trimEnd()},{role:'user',content:`Your reply was cut off by its length limit. Continue from the line after "${last}" in exactly the same format, without repeating any line and without the header line.`})}
+    const res=await claudeFetch({method:'POST',headers:{'content-type':'application/json','x-api-key':cfg.anthropicKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:cfg.model,max_tokens:max||16000,messages:msgs})});
+    if(!res.ok){let m=await res.text();try{m=JSON.parse(m).error.message}catch(e){}throw new Error(`Anthropic API ${res.status}: ${m}`)}
+    const j=await res.json();const t=(j.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n');
+    text+=(text&&!text.endsWith('\n')?'\n':'')+t.replace(/^```\w*\n?|```\s*$/g,'');
+    if(j.stop_reason!=='max_tokens')break;
+    const st=$('#woStat');if(st)st.innerHTML=`<div class="hint"><span class="spin"></span> Long list: ${(text.match(/^ITEM\|/gm)||[]).length} items so far, still reading…</div>`}
+  return text}
+function woParse(text){const o={wo:{},items:[]},seen=new Set();
+  for(const raw of String(text).split('\n')){const L=raw.trim().replace(/^[-*]\s+/,'');if(!L.includes('|'))continue;const f=L.split('|').map(x=>x.trim());
+    if(/^WO$/i.test(f[0])){const [,num,title,reg,sn,loc,start,rts,contact]=f;o.wo={num,title,reg,sn,loc,start,rts,contact};continue}
+    if(/^ITEM$/i.test(f[0])&&f[2]){const [,n,t,ata,st,est,act,cost,...note]=f;const k=(n||'')+'|'+t;if(seen.has(k))continue;seen.add(k);
+      o.items.push({n,t,ata,st:(st||'').toLowerCase(),est,act,cost,note:note.join(' / ')})}}
+  if(!o.items.length)throw new Error('No items could be read from that file. Is it a work order or due list? Try a clearer PDF, or photos of the pages.');
+  return o}
 async function woFileBlocks(files){const out=[];
   for(const f of files){if(f.type==='application/pdf'||/\.pdf$/i.test(f.name)){out.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:ckxB64(new Uint8Array(await f.arrayBuffer()))}});continue}
     if(/^image\//.test(f.type)||/\.(jpe?g|png|heic|webp)$/i.test(f.name)){const u=await fbShrink(f);out.push({type:'image',source:{type:'base64',media_type:'image/jpeg',data:u.slice(u.indexOf(',')+1)}})}}
@@ -5485,7 +5511,7 @@ function woImport(into){
   $('#woIn').onchange=async()=>{const files=[...$('#woIn').files];if(!files.length)return;const st=$('#woStat');
     st.innerHTML=`<div class="hint"><span class="spin"></span> Reading ${files.length>1?files.length+' files':esc(files[0].name)}… this takes up to a minute.</div>`;$('#woPick').disabled=true;
     try{const blocks=await woFileBlocks(files);if(!blocks.length)throw new Error('Choose a PDF or photos.');
-      const o=await woAsk([...blocks,{type:'text',text:WO_PROMPT}]);st.innerHTML='';woReview(o,into,files.map(f=>f.name).join(', '))}
+      const o=woParse(await woAskText([...blocks,{type:'text',text:WO_PROMPT}]));st.innerHTML='';woReview(o,into,files.map(f=>f.name).join(', '))}
     catch(e){st.innerHTML=`<div class="errbox">${esc(e.message||e)}</div>`;$('#woPick').disabled=false}}}
 function woReview(o,into,fname){const H=o.wo||{},items=(o.items||[]).filter(i=>i&&i.t);
   const same=!into&&H.num&&woList().find(w=>_alnum(w.num)===_alnum(H.num));const target=into||same;
@@ -5494,7 +5520,7 @@ function woReview(o,into,fname){const H=o.wo||{},items=(o.items||[]).filter(i=>i
     `<div class="grid2"><div class="field"><label>WO Number</label><input id="woR_num" value="${esc(H.num||'')}"></div><div class="field"><label>Tail Number</label><input id="woR_reg" value="${esc(String(H.reg||($('#fReg')||{}).value||'').toUpperCase())}" style="text-transform:uppercase"></div></div>
     <div class="field"><label>Title</label><input id="woR_title" value="${esc(H.title||'')}"></div><div class="field"><label>Location</label><input id="woR_loc" value="${esc(H.loc||'')}"></div>`}
     <div class="hint" style="margin:12px 0 0">${items.length} item${items.length===1?'':'s'} found${fname?' in '+esc(fname):''}. Untick any to leave out.</div>
-    <div class="worev">${items.map((i,k)=>{const old=ex.find(x=>key(x)===key(i));return `<label class="worevi"><input type="checkbox" data-k="${k}" checked><span class="won">${esc(i.n||'·')}</span><span class="wot">${esc(i.t)}<small>${esc([WO_STL[woSt(i.st)],i.est!=null?'Est '+woH(woNum(i.est)):'',i.act!=null?'Act '+woH(woNum(i.act)):'',i.cost!=null?woUSD(woNum(i.cost)):'',old?'already listed: updates it':''].filter(Boolean).join(' · '))}</small></span></label>`}).join('')}</div>
+    <div class="worev">${items.map((i,k)=>{const old=ex.find(x=>key(x)===key(i));return `<label class="worevi"><input type="checkbox" data-k="${k}" checked><span class="won">${esc(i.n||'·')}</span><span class="wot">${esc(i.t)}<small>${esc([WO_STL[woSt(i.st)],i.est!=null?'Est '+woH(woNum(i.est)):'',i.act!=null?'Act '+woH(woNum(i.act)):'',i.cost!=null?woUSD(woNum(i.cost)):'',i.note||'',old?'already listed: updates it':''].filter(Boolean).join(' · '))}</small></span></label>`}).join('')}</div>
     <label class="chk" style="display:flex;gap:8px;align-items:flex-start;margin-top:12px;text-transform:none;letter-spacing:0;font-size:14px"><input type="checkbox" id="woROk" style="margin-top:3px;width:auto;flex:none;min-height:0"> I checked these items against the work order.</label>
     <button class="btn" type="button" id="woRGo" style="width:100%;margin-top:10px" disabled>${target?'Add to Work Order':'Create Work Order'}</button>`;
   $('#woROk').onchange=()=>{$('#woRGo').disabled=!$('#woROk').checked};
@@ -5502,7 +5528,7 @@ function woReview(o,into,fname){const H=o.wo||{},items=(o.items||[]).filter(i=>i
     const w=target||Object.assign(woNew(),{num:$('#woR_num').value.trim(),reg:$('#woR_reg').value.trim().toUpperCase(),title:$('#woR_title').value.trim(),loc:$('#woR_loc').value.trim(),
       sn:String(H.sn||($('#fSn')||{}).value||''),start:H.start||dmy(new Date()),rts:H.rts||'',contact:H.contact||''});
     const hist=[];let added=0,upd=0;
-    for(const i of pick){const v={n:String(i.n||''),t:String(i.t),ata:String(i.ata||''),st:woSt(i.st),est:woNum(i.est),act:woNum(i.act),cost:woNum(i.cost)};const old=w.items.find(x=>!x.gone&&key(x)===key(v));
+    for(const i of pick){const v={n:String(i.n||''),t:String(i.t),ata:String(i.ata||''),st:woSt(i.st),est:woNum(i.est),act:woNum(i.act),cost:woNum(i.cost),note:String(i.note||'')};const old=w.items.find(x=>!x.gone&&key(x)===key(v));
       if(old){const ch=['st','est','act','cost'].filter(k=>v[k]!=null&&!(k==='st'&&v.st==='open')&&String(old[k]??'')!==String(v[k]));if(ch.length){ch.forEach(k=>old[k]=v[k]);old.upd=Date.now();old.by=woMe();upd++}}
       else{w.items.push(woItem(v));added++}}
     hist.push(`${target?'Imported from':'Created from'} ${fname||'the work order'}: ${added} item${added===1?'':'s'} added${upd?`, ${upd} updated`:''}`);
