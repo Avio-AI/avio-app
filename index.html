@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="a2001cb 2026-11-18">
+<meta name="avio-build" content="c730e9b 2026-11-18">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -6177,7 +6177,8 @@ function openTechOps(){
     newCase:()=>click('#btnNew'), cases:()=>click('#btnCases'), exportCase:()=>click('#btnExport'),
     theme:()=>click('#btnTheme'), help:()=>click('#btnHelp'), settings:()=>click('#btnSettings'),
     aircraft:()=>click('#fleetPick'), aiStatus:()=>click('#aiBadge'),
-    tab:t=>click('.tab[data-tab="'+t+'"]'),
+    // PFI is a section of RTS now; an app build that still shows a PFI tab gets RTS with PFI open
+    tab:t=>{if(t==='checks'){click('.tab[data-tab="docs"]');if(typeof openDocs==='function')openDocs('pfi');return}click('.tab[data-tab="'+t+'"]')},
     // Back leaves the case the way the web app's New Case does: the case is saved and closed, the form and the session
     // name start empty (only switching screens left the old case open, its title in the session name field)
     back:()=>{if(inChat())click('#btnNew')}
