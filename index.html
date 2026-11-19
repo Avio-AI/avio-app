@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="3019882 2026-11-18">
+<meta name="avio-build" content="657f656 2026-11-19">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -128,6 +128,7 @@ details.more summary::-webkit-details-marker{display:none}
 .wohist>div{font-size:13px;padding:6px 0;border-bottom:1px solid var(--border)}.wohist>div>span{display:block;font-size:11.5px;color:var(--text-dim)}
 .worev{max-height:46vh;overflow:auto;border:1px solid var(--border);border-radius:10px;margin-top:6px}
 .worevi{display:flex;gap:10px;align-items:flex-start;padding:9px 10px;border-bottom:1px solid var(--border);text-transform:none;letter-spacing:0;font-size:14px;cursor:pointer}.worevi:last-child{border-bottom:none}.worevi input{margin-top:3px;width:auto;flex:none;min-height:0}
+.wodate{width:42px;min-width:42px;padding:0!important;justify-content:center}.wodate .ms{font-size:20px}
 .ibwo{display:flex;gap:10px;align-items:center;margin-top:8px;padding:10px;border:1px solid var(--cyan);border-radius:10px}.ibwo>.ms{color:var(--cyan)}.ibwo>div{flex:1;min-width:0}
 details.more[open] summary{margin-bottom:10px}
 
@@ -5432,17 +5433,24 @@ function woLinkCase(c){if(!WO_LINK)return;const L=WO_LINK;WO_LINK=null;const w=w
   c.wo={id:w.id,item:i.id,label:L.label};i.caseId=c.id;i.upd=Date.now();if(i.st==='open')i.st='work';woSave(w,`Item ${i.n||''}: troubleshooting case opened`)}
 function woEditHeader(w,isNew){
   const f=(k,l,x='')=>`<div class="field"><label>${l}</label><input id="woH_${k}" value="${esc(w[k]||'')}" autocomplete="off" ${x}></div>`;
+  // a date: typed (21 OCT 2026) or picked from the calendar button
+  const fd=(k,l)=>`<div class="field"><label>${l}</label><div style="display:flex;gap:6px"><input id="woH_${k}" value="${esc(w[k]||'')}" placeholder="21 OCT 2026" autocapitalize="characters" autocomplete="off" spellcheck="false" style="text-transform:uppercase;min-width:0;padding-left:12px;padding-right:6px">
+    <button class="btn2 small wodate" type="button" title="Pick a date" aria-label="Pick a date" style="position:relative;overflow:hidden;flex:none"><span class="ms">calendar_month</span><input type="date" data-for="woH_${k}" tabindex="-1" style="position:absolute;inset:0;opacity:0;width:100%;height:100%"></button></div></div>`;
   showModal(isNew?'NEW WORK ORDER':'WORK ORDER DETAILS',`<div class="grid2">${f('num','WO Number')}${f('reg','Tail Number','autocapitalize="characters" style="text-transform:uppercase"')}</div>
     ${f('title','Title','placeholder="e.g. 96-month inspection"')}
     <div class="grid2">${f('sn','Serial Number','inputmode="numeric"')}<div class="field"><label>Where</label><select id="woH_kind"><option value="shop"${w.kind!=='home'?' selected':''}>Service center</option><option value="home"${w.kind==='home'?' selected':''}>Home base</option></select></div></div>
     ${f('loc','Location / Service Center')}
-    <div class="grid2">${f('start','In Since','placeholder="21 OCT 2026" autocapitalize="characters"')}${f('rts','Planned RTS','placeholder="21 OCT 2026" autocapitalize="characters"')}</div>
+    <div class="grid2">${fd('start','In Since')}${fd('rts','Planned RTS')}</div>
     ${f('contact','Contact (name, phone)')}
     ${f('from','Progress Emails From','type="email" placeholder="reports@servicecenter.com or @servicecenter.com" autocapitalize="off"')}
     <div class="hint">The mail watcher files emails from this address, and any email with the WO number in its subject, so their updates can be reviewed here.</div>
     <div class="field"><label>Notes</label><textarea id="woH_notes" rows="2">${esc(w.notes||'')}</textarea></div>
     <button class="btn" type="button" id="woHSave" style="width:100%;margin-top:8px">${isNew?'Create Work Order':'Save'}</button>`);
-  $('#woHSave').onclick=()=>{const ch=[];for(const k of ['num','title','reg','sn','kind','loc','start','rts','contact','from','notes']){const el=$('#woH_'+k);let v=el.value.trim();if(k==='reg')v=v.toUpperCase();if(k==='from')v=v.toLowerCase();if((w[k]||'')!==v){ch.push(k);w[k]=v}}
+  $$('#modal .wodate input[type=date]').forEach(pk=>{const t=$('#'+pk.dataset.for);
+    const sync=()=>{const d=parseDay(t.value);if(d)pk.value=isoDay(d)};sync();
+    pk.onclick=()=>{sync();try{pk.showPicker()}catch(_){}};
+    pk.onchange=()=>{if(pk.value)t.value=dmy(parseDay(pk.value)||new Date())}});
+  $('#woHSave').onclick=()=>{const ch=[];for(const k of ['num','title','reg','sn','kind','loc','start','rts','contact','from','notes']){const el=$('#woH_'+k);let v=el.value.trim();if(k==='reg')v=v.toUpperCase();if(k==='from')v=v.toLowerCase();if((k==='start'||k==='rts')&&v){const d=parseDay(v);if(d)v=dmy(d)}if((w[k]||'')!==v){ch.push(k);w[k]=v}}
     w.hupd=Date.now();woSave(w,isNew?null:ch.length?'Details changed: '+ch.join(', '):null);if(ch.includes('num'))mwPushTickets();if(ch.includes('from'))woWatchSender(w);hideModal();WO_OPEN=w.id;renderWO()}}
 function woAddItems(w){
   showModal('ADD ITEMS',`<div class="kv">One item per line. Start a line with its item number if it has one (e.g. "12 Replace left main tire").</div>
