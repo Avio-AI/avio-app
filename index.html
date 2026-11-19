@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="657f656 2026-11-19">
+<meta name="avio-build" content="335e22b 2026-11-19">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -128,6 +128,7 @@ details.more summary::-webkit-details-marker{display:none}
 .wohist>div{font-size:13px;padding:6px 0;border-bottom:1px solid var(--border)}.wohist>div>span{display:block;font-size:11.5px;color:var(--text-dim)}
 .worev{max-height:46vh;overflow:auto;border:1px solid var(--border);border-radius:10px;margin-top:6px}
 .worevi{display:flex;gap:10px;align-items:flex-start;padding:9px 10px;border-bottom:1px solid var(--border);text-transform:none;letter-spacing:0;font-size:14px;cursor:pointer}.worevi:last-child{border-bottom:none}.worevi input{margin-top:3px;width:auto;flex:none;min-height:0}
+#caseWo{margin:8px 12px 0}#caseWo .wochip{display:inline-flex;align-items:center;gap:4px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#caseWo .wochip .ms{font-size:18px}
 .wodate{width:42px;min-width:42px;padding:0!important;justify-content:center}.wodate .ms{font-size:20px}
 .ibwo{display:flex;gap:10px;align-items:center;margin-top:8px;padding:10px;border:1px solid var(--cyan);border-radius:10px}.ibwo>.ms{color:var(--cyan)}.ibwo>div{flex:1;min-width:0}
 details.more[open] summary{margin-bottom:10px}
@@ -906,6 +907,7 @@ try{if(sessionStorage.getItem('avio_splash'))document.getElementById('splash').r
     <!-- CHAT -->
     <section id="chatView" class="hidden">
       <div id="briefBar" class="hidden"></div>
+      <div id="caseWo" class="hidden"></div>
       <div id="chatLog"></div>
       <div id="composer">
         <div class="qchips" id="followChips"></div>
@@ -2114,6 +2116,7 @@ async function ensureBrief(c){
   return c.brief;
 }
 function renderBriefBar(busy){
+  renderCaseWo();
   const el=$('#briefBar');if(!el)return;const c=CASE;
   const comp=$('#composer');if(comp)comp.classList.toggle('closedcase',!!(c&&c.status==='closed'));
   const ci=$('#chatInput');if(ci)ci.placeholder=c&&c.status==='closed'?'Case closed — reopen it from the Case Brief to continue':'Report or ask a follow-up';
@@ -5462,6 +5465,39 @@ function woAddItems(w){
     let next=Math.max(0,...w.items.filter(i=>!i.gone).map(i=>parseInt(i.n)||0))+1;const st=$('#woAddS').value,tech=$('#woAddTech').value.trim();
     const add=lines.map(l=>{const m=l.match(/^#?(\d+[A-Za-z]?)[.):\-\s]+(.+)$/);return woItem({n:m?m[1]:String(next++),t:m?m[2]:l,st,tech})});
     w.items.push(...add);woSave(w,add.map(i=>`Item ${i.n} added: ${i.t.slice(0,60)}`));hideModal();WO_FILTER='all';renderWO()}}
+
+// ───────── Mx Magic → WO: a case becomes an item of an open work order, or of a new one
+function renderCaseWo(){const el=$('#caseWo');if(!el)return;const c=CASE;if(!c){el.classList.add('hidden');return}
+  el.classList.remove('hidden');const w=c.wo&&woGet(c.wo.id),i=w&&w.items.find(x=>x.id===c.wo.item&&!x.gone);
+  if(!i&&c.wo&&!w){el.innerHTML=`<button type="button" class="wochip on" id="cwSync"><span class="ms">handyman</span> ${esc(c.wo.label||'Work order')} ›</button>`;
+    $('#cwSync').onclick=()=>{$('.tab[data-tab=wo]').click();woPull().then(()=>{if(woGet(c.wo.id)){WO_OPEN=c.wo.id;WO_EDIT=c.wo.item;renderWO()}})};return}
+  el.innerHTML=i?`<button type="button" class="wochip on" id="cwOpen"><span class="ms">handyman</span> ${esc(w.num?'WO '+w.num:(w.title||'Work Order'))} · Item ${esc(i.n||'')} · ${esc(WO_STL[i.st]||i.st)} ›</button>`
+    :`<button type="button" class="wochip" id="cwAdd"><span class="ms">add</span> Add to WO</button>`;
+  const o=$('#cwOpen');if(o)o.onclick=()=>{WO_OPEN=w.id;WO_FILTER='all';WO_EDIT=i.id;$('.tab[data-tab=wo]').click()};
+  const a=$('#cwAdd');if(a)a.onclick=()=>woAddCase()}
+function caseWoText(c){const f=c.form||{};const b=c.brief&&c.brief.headline;
+  return String(b||c.title||[...(f.faults||[]).map(x=>typeof x==='string'?x:(x&&(x.msg||x.text||x.name))||''),f.desc].filter(Boolean).join(' · ')||'Troubleshooting case').replace(/\s+/g,' ').trim().slice(0,200)}
+function woAddCase(){const c=CASE;if(!c)return;const f=c.form||{},reg=String(f.reg||'').toUpperCase();
+  const L=woList().filter(w=>w.status!=='closed').sort((a,b)=>((b.reg===reg)-(a.reg===reg))||((b.updated||0)-(a.updated||0)));
+  showModal('ADD TO WORK ORDER',`<div class="field"><label>Item Description</label><textarea id="cwT" rows="2">${esc(caseWoText(c))}</textarea></div>
+    <div class="grid2"><div class="field"><label>Status</label><select id="cwS">${WO_ST.map(([k,l])=>`<option value="${k}"${k==='work'?' selected':''}>${l}</option>`).join('')}</select></div><div class="field"><label>Technician</label><input id="cwTech" value="${esc(woMe())}" autocomplete="off"></div></div>
+    <div class="hint" style="margin:12px 0 0">Add it to:</div>
+    <div class="worev">${L.map((w,k)=>{const st=woStats(w);return `<label class="worevi"><input type="radio" name="cwW" value="${w.id}"${k===0?' checked':''}><span class="wot">${esc(woLabel(w))}<small>${esc([w.kind==='home'?'Home base':w.loc,st.done+' of '+st.n+' complete',w.reg&&w.reg!==reg?'other aircraft':''].filter(Boolean).join(' · '))}</small></span></label>`}).join('')}
+      <label class="worevi"><input type="radio" name="cwW" value="new"${L.length?'':' checked'}><span class="wot"><b>New Work Order</b><small>Starts a WO for ${esc(reg||'this aircraft')} with this item</small></span></label></div>
+    <div id="cwNew" class="${L.length?'hidden':''}"><div class="grid2"><div class="field"><label>WO Number</label><input id="cwNum" autocomplete="off"></div><div class="field"><label>Where</label><select id="cwKind"><option value="shop">Service center</option><option value="home">Home base</option></select></div></div>
+      <div class="field"><label>Title</label><input id="cwTitle" placeholder="e.g. Downtime 18 NOV 2026" autocomplete="off"></div></div>
+    <button class="btn" type="button" id="cwGo" style="width:100%;margin-top:12px">Add to Work Order</button>`);
+  const sync=()=>{const v=(document.querySelector('input[name=cwW]:checked')||{}).value;$('#cwNew').classList.toggle('hidden',v!=='new');$('#cwGo').textContent=v==='new'?'Create Work Order':'Add to Work Order'};
+  $$('input[name=cwW]').forEach(r=>r.onchange=sync);sync();
+  $('#cwGo').onclick=()=>{const t=$('#cwT').value.trim();if(!t){$('#cwT').focus();return}
+    const v=(document.querySelector('input[name=cwW]:checked')||{}).value;let w=v==='new'?null:woGet(v);
+    if(!w){w=Object.assign(woNew(),{reg,sn:String(f.sn||''),num:$('#cwNum').value.trim(),title:$('#cwTitle').value.trim(),kind:$('#cwKind').value});w.hist.push({at:Date.now(),by:woMe(),src:'tech',txt:'Work order started from Mx Magic'})}
+    const n=String(Math.max(0,...w.items.filter(i=>!i.gone).map(i=>parseInt(i.n)||0))+1);
+    const i=woItem({n,t,st:$('#cwS').value,tech:$('#cwTech').value.trim(),caseId:c.id});w.items.push(i);
+    c.wo={id:w.id,item:i.id,label:`${w.num?'WO '+w.num:'WO'} item ${n}`};saveCase();
+    woSave(w,`Item ${n} added from Mx Magic case: ${t.slice(0,60)}`);if(v==='new'&&w.num)mwPushTickets();hideModal();renderCaseWo();
+    if(v==='new'){WO_OPEN=w.id;WO_FILTER='all';WO_EDIT=null;$('.tab[data-tab=wo]').click()}
+    else notice(`Added to ${woLabel(w)} as item ${n}.`,()=>{WO_OPEN=w.id;WO_EDIT=i.id;$('.tab[data-tab=wo]').click()})}}
 
 // ───────── import a work order (PDF or photos): Claude lists the items, the technician checks them
 const WO_PROMPT=`You read an aircraft maintenance work order, due list or work package (the attached pages) and list its line items for a maintenance tracking app.
