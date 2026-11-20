@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="d725821 2026-11-20">
+<meta name="avio-build" content="c6e21c1 2026-11-20">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -2073,7 +2073,7 @@ const BRIEF_TOOL={name:'write_brief',description:'Write the case brief.',input_s
   references:{type:'array',items:{type:'string'},description:'Up to 6 key manual references (task numbers / citations) from the case.'}},
   required:['headline','status','problem','work_done','next_steps']}};
 const BRIEF_SYS=`You write concise case briefs for an aircraft maintenance team. Readers: tech ops, the manufacturer's field service representatives, flight crew, and the next technician picking up the job. They need the problem, what has been done, where it stands and what happens next — not the reasoning trail.
-Rules: facts only from the case record. Never invent part numbers, serial numbers, values, limits or task numbers. Keep what the technician actually did separate from what the assistant recommended. Short items in plain hangar language, each under about 25 words. Write dates as 21 OCT 2026. Use the citation strings from the record for references.`;
+Rules: facts only from the case record. Never invent part numbers, serial numbers, values, limits or task numbers. Keep what the technician actually did separate from what the assistant recommended. Short items in plain hangar language, each under about 25 words. Write dates as 21 OCT 2026. Use the citation strings from the record for references. Every field is plain text: never wrap items or values in tags such as <item>, <part>, <pn> or <status>; each list entry is one plain string, each part an object with part, pn and status.`;
 const briefModel=()=>/haiku|sonnet/.test(cfg.model)?cfg.model:'claude-sonnet-5-5';
 const replies=c=>(c.msgs||[]).filter(m=>m.role==='assistant').length;
 const briefStale=c=>!!(c&&c.brief&&c.status!=='closed'&&c.brief.turns<replies(c));
@@ -2144,10 +2144,19 @@ function renderBriefBar(busy){
 // brief view (sheet, Copy Text, Email, Brief PDF) then failed, and the Case Brief would not open at all. normBrief
 // repairs that when a brief is written and when an older saved brief is shown.
 const BRIEF_LISTS=['messages','work_done','findings','next_steps','support_needed','references'];
-const listOf=a=>(Array.isArray(a)?a:a==null||a===''?[]:typeof a==='string'?a.split(/\n+/):[a]).map(v=>v==null?'':typeof v==='object'?(v.text||v.item||v.step||JSON.stringify(v)):String(v)).map(v=>v.replace(/^\s*(?:[-•*]|\d+[.)])\s+/,'').trim()).filter(Boolean);
+// The model can also hand a list back as one string of markup: "<item>…</item><item>…</item>", and parts as
+// "<item><part>…</part><pn>…</pn><status>…</status></item>". Those are split into real items; any other stray tag is dropped.
+const _tagRx=/<\/?[A-Za-z_][\w-]*(?:\s+[\w-]+="[^"]*")*\s*\/?>/g;
+const untag=v=>String(v).replace(_tagRx,' ').replace(/\s+/g,' ').trim();
+const tagItems=v=>{const m=[...String(v).matchAll(/<(item|step|li)>([\s\S]*?)<\/\1>/gi)].map(x=>x[2]);return m.length?m:null};
+const tagField=(v,k)=>{const m=String(v).match(new RegExp('<'+k+'>([\\s\\S]*?)</'+k+'>','i'));return m?untag(m[1]):''};
+const listOf=a=>(Array.isArray(a)?a:a==null||a===''?[]:typeof a==='string'?(tagItems(a)||a.split(/\n+/)):[a]).flatMap(v=>typeof v==='string'&&tagItems(v)?tagItems(v):[v]).map(v=>v==null?'':typeof v==='object'?(v.text||v.item||v.step||JSON.stringify(v)):String(v)).map(v=>untag(v).replace(/^\s*(?:[-•*]|\d+[.)])\s+/,'').trim()).filter(Boolean);
+const partOf=p=>{if(typeof p==='string'){if(/<part>/i.test(p))return {part:tagField(p,'part'),pn:tagField(p,'pn'),status:tagField(p,'status')};return {part:untag(p)}}
+  if(p&&typeof p==='object'){const o={...p,part:untag(p.part||p.name||p.description||'')};for(const k of ['pn','status'])if(o[k]!=null)o[k]=untag(o[k]);return o}return null};
 function normBrief(b){if(!b||typeof b!=='object')return b;const o={...b};for(const k of BRIEF_LISTS)o[k]=listOf(o[k]);
-  o.parts=(Array.isArray(o.parts)?o.parts:o.parts?[o.parts]:[]).map(p=>typeof p==='string'?{part:p}:p&&typeof p==='object'?{...p,part:String(p.part||p.name||p.description||'')}:null).filter(p=>p&&p.part);
-  for(const k of ['headline','problem','status','likely_cause','confidence'])if(o[k]!=null&&typeof o[k]!=='string')o[k]=String(o[k]);
+  const P=Array.isArray(o.parts)?o.parts:o.parts?[o.parts]:[];
+  o.parts=P.flatMap(p=>typeof p==='string'&&tagItems(p)?tagItems(p):[p]).map(partOf).filter(p=>p&&p.part);
+  for(const k of ['headline','problem','status','likely_cause','confidence'])if(o[k]!=null)o[k]=untag(o[k]);
   return o}
 const BL=(t,arr,ordered)=>arr&&arr.length?`<h4>${t}</h4><${ordered?'ol':'ul'}>${arr.map(x=>`<li>${esc(x)}</li>`).join('')}</${ordered?'ol':'ul'}>`:'';
 function briefDispatch(c){
@@ -3374,7 +3383,7 @@ function syMeta(c,sha){const f=c.form||{};let ata='';try{ata=caseAta(f)}catch(e)
   return {sha,created:c.created,updated:c.updated,reg:String(f.reg||'').toUpperCase(),ata:ata||(c.deferral&&c.deferral.ata)||'',title:c.title||'',named:!!c.named,
     replies:(c.msgs||[]).filter(m=>m.role==='assistant').length,by:c.by||'',editedBy:c.editedBy||'',op:c.op||'',def:!!c.deferral,clr:!!c.clearing,st:c.status||'open',hl:(c.brief&&c.brief.headline)||'',...caseFacts(c)}}
 // the facts case search and trends work from (kept in the local case index, v2)
-function caseFacts(c){const f=c.form||{},b=c.brief||{},cut=(x,n)=>String(x||'').replace(/\s+/g,' ').trim().slice(0,n),L=x=>Array.isArray(x)?x:x?[x]:[];
+function caseFacts(c){const f=c.form||{},b=(c.brief&&normBrief(c.brief))||{},cut=(x,n)=>String(x||'').replace(/\s+/g,' ').trim().slice(0,n),L=x=>Array.isArray(x)?x:x?[x]:[];
   const fl=[...(f.faults||[]).map(x=>x&&(x.msg||x.text)),...(f.cmc||[]).map(x=>x&&[x.code,x.msg].filter(Boolean).join(' '))].filter(Boolean).map(x=>cut(x,80)).slice(0,10);
   const pt=[...(Array.isArray(c.parts)?c.parts:[]).map(p=>({n:cut(p.name,60),po:cut(p.off&&p.off.pn,30),so:cut(p.off&&p.off.sn,30),pn:cut(p.on&&p.on.pn,30)})),
     ...(c.clearing&&(c.clearing.pn_off||c.clearing.pn_on)?[{n:'',po:cut(c.clearing.pn_off,30),so:cut(c.clearing.sn_off,30),pn:cut(c.clearing.pn_on,30)}]:[])].slice(0,6);
