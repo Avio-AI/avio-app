@@ -41,7 +41,8 @@ export default {
     const cors = { 'Access-Control-Allow-Origin': env.APP_ORIGIN || '*', 'Access-Control-Allow-Headers': 'authorization, content-type', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' };
     if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
     const json = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { ...cors, 'content-type': 'application/json' } });
-    const authed = () => (req.headers.get('authorization') || '') === 'Bearer ' + env.SETUP_KEY;
+    // a watcher with no SETUP_KEY accepts nobody: a missing secret must never mean "open to anyone"
+    const authed = () => { const k = String(env.SETUP_KEY || ''); return k.length > 0 && same(req.headers.get('authorization') || '', 'Bearer ' + k); };
     try {
       // Google: a browser sign-in that comes back to /auth/callback
       // a short-lived ticket for the sign-in link, so the watcher key never appears in a URL (browser history, proxy logs)
@@ -52,8 +53,8 @@ export default {
       }
       if (url.pathname === '/auth/start') {
         const tk = url.searchParams.get('t') || '', [exp, sig] = tk.split('.');
-        const okTicket = exp && sig && +exp > Date.now() && sig === await hmac(env.SETUP_KEY, 'ticket:' + exp);
-        if (!okTicket && url.searchParams.get('k') !== env.SETUP_KEY) return html('This link is not valid or has expired. Start again from the app.', 403);   // k= kept for older app builds
+        const okTicket = String(env.SETUP_KEY || '').length > 0 && exp && sig && +exp > Date.now() && same(sig, await hmac(env.SETUP_KEY, 'ticket:' + exp));
+        if (!okTicket) return html('This link is not valid or has expired. Start again from the app.', 403);
         if (!env.GOOGLE_CLIENT_ID) return html('Google mailboxes are not set up on this mail watcher.', 400);
         const state = await hmac(env.SETUP_KEY, 'state:' + Math.floor(Date.now() / 600000));
         const q = new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, redirect_uri: url.origin + '/auth/callback', response_type: 'code', scope: SCOPE, access_type: 'offline', prompt: 'consent select_account', state });
@@ -191,10 +192,17 @@ async function getState(env, B) {
 function belongs(X, b, from, subject, thread) {
   const mine = from === String(b.email).toLowerCase();
   const tag = (subject.match(TAG_RX) || [])[1] || '';
-  const ticket = X.cfg.tickets.find(t => subject.includes(t)) || '';
+  const ticket = X.cfg.tickets.find(t => hasToken(subject, t)) || '';
   const watched = !mine && X.cfg.senders.some(s => s.startsWith('@') ? from.endsWith(s) : from === s);
   return !!(tag || ticket || X.threads.has(thread) || watched);
 }
+// a recorded number counts only as a whole token: WO 1234 must not match "11234", "1234.50" or "A1234"
+export function hasToken(subject, t) {
+  const i = String(t || ''); if (!i) return false;
+  return new RegExp('(?<![A-Za-z0-9.,$])(?<!\\d-)' + i.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![A-Za-z0-9]|[.,]\\d)', 'i').test(String(subject));
+}
+// constant-time string compare
+function same(a, b) { a = String(a); b = String(b); let d = a.length ^ b.length; for (let i = 0; i < Math.max(a.length, b.length); i++) d |= (a.charCodeAt(i) | 0) ^ (b.charCodeAt(i) | 0); return d === 0; }
 async function filed(X, item) {
   X.threads.add(item.threadId);
   if (!item.mine) await pushAll(X.env, { title: `${item.fromName || item.from}${item.tag ? ' · ' + item.tag.split('-')[0] : ''}`, body: item.subject || '(no subject)', id: item.id }, X.f);
@@ -216,7 +224,8 @@ async function pollGoogle(X, b) {
     const hd = hdrs(meta.payload);
     X.seen.add(id);
     if (!belongs(X, b, addr(hd.from), hd.subject || '', meta.threadId)) continue;
-    await filed(X, await captureGoogle(X, H, id, b));
+    // not filed (cases repo down, token expired): leave it unseen and keep the time marker, so the next poll tries again
+    try { await filed(X, await captureGoogle(X, H, id, b)); } catch (e) { X.seen.delete(id); throw e; }
     saved++;
   }
   X.S.last[b.id] = startedAt;
@@ -282,7 +291,7 @@ async function pollMs(X, b) {
       const thread = 'o' + (await sh(m.conversationId || key)).slice(0, 22);
       const from = String((m.from && m.from.emailAddress && m.from.emailAddress.address) || '').toLowerCase();
       if (!belongs(X, b, from, m.subject || '', thread)) continue;
-      await filed(X, await captureMs(X, H, m, key, thread, b));
+      try { await filed(X, await captureMs(X, H, m, key, thread, b)); } catch (e) { X.seen.delete(key); throw e; }
       saved++;
     }
   }

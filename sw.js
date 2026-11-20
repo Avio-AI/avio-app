@@ -3,7 +3,7 @@
 //    no signal. The page is fetched fresh from the network first (a published fix shows on the next launch); the copy
 //    is used only when the network fails or takes too long. Data sets are not handled here: the page keeps them itself.
 // 2. Case-email notifications (push).
-const SHELL = 'avio-shell-v1';
+const SHELL = 'avio-shell-v2';   // v2: a v1 copy may hold the User Guide in place of the app (fixed 20 NOV 2026)
 const PAGE = new URL('./', self.registration.scope).href;          // the app page, stored under one key whatever the ?query
 const FILES = ['manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png', 'icon.svg',
   'vendor/fonts.css', 'vendor/fonts/material-symbols-rounded.woff2', 'vendor/fonts/roboto-latin-400-normal.woff2',
@@ -24,7 +24,9 @@ self.addEventListener('activate', e => e.waitUntil((async () => {
   await self.clients.claim();
 })()));
 
-const isPage = (req, url) => req.mode === 'navigate' || url.href === PAGE || url.href === PAGE + 'index.html';
+// Only the app's own address is the app page. Other pages (the Help guides open in a frame, which is also a navigation)
+// must never be stored as the app: that made an offline launch open the guide.
+const isPage = url => { const p = url.origin + url.pathname; return p === PAGE || p === PAGE + 'index.html'; };
 const isShellFile = url => FILES.includes(url.href) || url.href.startsWith(new URL('help/', self.registration.scope).href);
 
 self.addEventListener('fetch', e => {
@@ -32,7 +34,7 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;              // Claude, GitHub, mail: straight to the network
-  if (isPage(req, url)) { e.respondWith(pageFirst(req)); return; }
+  if (isPage(url)) { e.respondWith(pageFirst(req)); return; }
   if (isShellFile(url)) { e.respondWith(fileFresh(req, url.href)); return; }
 });
 
