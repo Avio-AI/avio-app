@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="c6e21c1 2026-11-20">
+<meta name="avio-build" content="64f0b42 2026-11-21">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -508,6 +508,12 @@ mark{background:var(--mark-bg);color:inherit}
 .caselist .ci .t div:first-child{font-weight:500;font-size:15px}
 .caselist .ci .t div:last-child{font-size:12.5px}
 .caselist .ci .t:hover div:first-child{color:var(--cyan)}
+.caselist .ci.tail:before{content:'flight'}
+.caselist .ci.tail.gen:before{content:'construction'}
+.caselist .ci.tail .chev{color:var(--text-dim);font-size:22px}
+.tailhead{display:flex;align-items:center;gap:8px;margin:0 0 6px}
+.tailhead .btn2{flex:none}
+.tailhead b{font-size:16px}
 
 /* CAS colors keep their meaning */
 .cas-amber{color:var(--cas-amber)}.cdot.amber{background:var(--cas-amber)}
@@ -3480,16 +3486,39 @@ function syAll(){
 }
 function syLabel(c){const closed=c.remote?c.m.st==='closed':c.status==='closed';const hl=c.remote?c.m.hl:(c.brief&&c.brief.headline);
   if(!c.remote)return caseListLabel(c)+(closed?' · Closed':'')+(hl?' — '+hl:'');const m=c.m;return `${m.reg||'No Tail'} · ATA ${m.ata||'—'} · ${dmy(new Date(m.created||m.updated))}${closed?' · Closed':''}${hl?' — '+hl:''}`}
+// Recent Cases is two levels: the aircraft (tails) of this model first, then that aircraft's cases. Cases with neither a
+// registration nor a serial number go under "General TS", always at the top. A tail's serial number is taken from any of its
+// cases; an aircraft known only by serial number is listed as "S/N …".
+const GEN_TAIL='__general__';
+let CS_TAIL=null;   // the aircraft open in Recent Cases (kept while the list refreshes)
+const caseRegSn=c=>{const f=c.remote?(c.m||{}):(c.form||{});return [String(f.reg||'').trim().toUpperCase(),String(f.sn||'').trim()]};
+function caseTailKey(c){const [r,n]=caseRegSn(c);return r?'R:'+r:n?'S:'+n.toUpperCase():GEN_TAIL}
+function caseTails(cases){const T=new Map();
+  for(const c of cases){const k=caseTailKey(c),[r,n]=caseRegSn(c);let t=T.get(k);
+    if(!t)T.set(k,t={key:k,reg:r,sn:'',cases:[],open:0,updated:0});
+    if(!t.sn&&n)t.sn=n;t.cases.push(c);t.updated=Math.max(t.updated,c.updated||0);
+    if((c.remote?c.m.st:c.status)!=='closed')t.open++}
+  const L=[...T.values()].filter(t=>t.key!==GEN_TAIL).sort((a,b)=>b.updated-a.updated);
+  return [T.get(GEN_TAIL)||{key:GEN_TAIL,reg:'',sn:'',cases:[],open:0,updated:0},...L]}
+const tailName=t=>t.key===GEN_TAIL?'General TS':t.reg||('S/N '+t.sn);
 function syRenderCases(){
-  const cases=syAll();const reps=c=>c.remote?c.m.replies:(c.msgs||[]).filter(m=>m.role==='assistant').length;
-  const nImp=impWaiting();
-  showModal('RECENT CASES',(nImp?`<div class="impcard"><span class="ms">move_to_inbox</span><span>${nImp} case${nImp===1?'':'s'} from another app on this phone</span><button class="btn2 small" id="impOpen">Import</button></div>`:'')+`<div class="hint" id="syStat" style="margin:0 0 6px"></div>`+(cases.length?`<div class="caselist">${cases.map(c=>`<div class="ci"><div class="t" data-id="${c.id}"><div>${esc(syLabel(c))}</div><div>${c.named?esc(c.title)+' · ':''}Updated ${dmyt(c.updated)} · ${(n=>n+(n===1?' reply':' replies'))(reps(c))}${c.by?' · '+esc(c.by):''}${c.remote?' · <span class="ms" style="font-size:14px;vertical-align:-2px" title="Saved on another device">cloud</span>':''}</div></div><button class="btn2 small danger" data-del="${c.id}">Delete</button></div>`).join('')}</div>`:'<div class="kv">No saved cases yet.</div>'));
+  const all=syAll();const reps=c=>c.remote?c.m.replies:(c.msgs||[]).filter(m=>m.role==='assistant').length;
+  const nImp=impWaiting(),tails=caseTails(all);
+  const tail=CS_TAIL&&tails.find(t=>t.key===CS_TAIL);if(!tail)CS_TAIL=null;
+  const cases=tail?tail.cases:[];
+  const tailRow=t=>`<div class="ci tail${t.key===GEN_TAIL?' gen':''}"><div class="t" data-tail="${esc(t.key)}"><div>${esc(tailName(t))}${t.reg&&t.sn?` <span style="font-weight:400;color:var(--text-dim)">· S/N ${esc(t.sn)}</span>`:''}</div><div>${t.key===GEN_TAIL?'Troubleshooting with no tail or serial number · ':''}${t.cases.length} case${t.cases.length===1?'':'s'}${t.open?` · ${t.open} open`:''}${t.updated?' · Updated '+dmyt(t.updated):''}</div></div><span class="ms chev">chevron_right</span></div>`;
+  const body=!tail?(all.length?`<div class="caselist">${tails.map(tailRow).join('')}</div>`:'<div class="kv">No saved cases yet.</div>')
+    :`<div class="tailhead"><button class="btn2 small" type="button" id="csBack"><span class="ms" style="font-size:18px;vertical-align:-4px">chevron_left</span> Aircraft</button><b>${esc(tailName(tail))}</b>${tail.reg&&tail.sn?`<span class="hint" style="margin:0">S/N ${esc(tail.sn)}</span>`:''}</div>`
+     +(cases.length?`<div class="caselist">${cases.map(c=>`<div class="ci"><div class="t" data-id="${c.id}"><div>${esc(syLabel(c).replace(/^[^·]*·\s*/,''))}</div><div>${c.named?esc(c.title)+' · ':''}Updated ${dmyt(c.updated)} · ${(n=>n+(n===1?' reply':' replies'))(reps(c))}${c.by?' · '+esc(c.by):''}${c.remote?' · <span class="ms" style="font-size:14px;vertical-align:-2px" title="Saved on another device">cloud</span>':''}</div></div><button class="btn2 small danger" data-del="${c.id}">Delete</button></div>`).join('')}</div>`:'<div class="kv">No cases for this aircraft yet.</div>');
+  showModal('RECENT CASES',(nImp?`<div class="impcard"><span class="ms">move_to_inbox</span><span>${nImp} case${nImp===1?'':'s'} from another app on this phone</span><button class="btn2 small" id="impOpen">Import</button></div>`:'')+`<div class="hint" id="syStat" style="margin:0 0 6px"></div>`+body);
   syStat();{const b=$('#impOpen');if(b)b.onclick=openImport}
-  {const st=$('#syStat');if(st&&cases.length>1){const box=document.createElement('div');box.className='askcases';
+  $$('.caselist [data-tail]').forEach(el=>el.onclick=()=>{CS_TAIL=el.dataset.tail;syRenderCases();const m=$('#modal .sheet')||$('#modal');if(m)m.scrollTop=0});
+  {const b=$('#csBack');if(b)b.onclick=()=>{CS_TAIL=null;syRenderCases()}}
+  {const st=$('#syStat');if(st&&!tail&&all.length>1){const box=document.createElement('div');box.className='askcases';
     box.innerHTML=`<div style="display:flex;gap:8px"><input id="acQ" placeholder="Ask about past cases, e.g. has PACK HOT come back on any tail?" autocomplete="off" style="min-width:0"><button class="btn small" type="button" id="acGo" style="flex:none">Ask</button></div><div id="acOut" style="margin-top:8px"></div>`;
     st.parentNode.insertBefore(box,st);const go=()=>{const q=$('#acQ').value.trim();if(!q){$('#acQ').focus();return}$('#acGo').disabled=true;askCases(q,$('#acOut')).finally(()=>{const b=$('#acGo');if(b)b.disabled=false})};
     $('#acGo').onclick=go;$('#acQ').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();go()}}}}
-  $$('.caselist .t').forEach(el=>el.onclick=async()=>{
+  $$('.caselist .t[data-id]').forEach(el=>el.onclick=async()=>{
     let c=loadCases().find(x=>x.id===el.dataset.id);
     if(!c){el.style.opacity=.5;try{c=await syFetch(el.dataset.id);syStoreLocal(c)}catch(e){SY.err=e.message;syStat();el.style.opacity=1;return}}
     await switchCase(c);try{localStorage.setItem(SY_PFX+'_current',JSON.stringify(c.id))}catch(e){}hideModal();showChat();renderCase();
@@ -3499,7 +3528,7 @@ function syRenderCases(){
     if(cur)showIntake();
     try{await syDelete(id)}catch(e){SY.err=e.message}syRenderCases()});
 }
-$('#btnCases').onclick=()=>{syRenderCases();if(syOn()){syPull().then(()=>{if(/recent cases/i.test($('#modalTitle').textContent))syRenderCases()}).catch(e=>{SY.err=String(e.message||e);syStat()})}};
+$('#btnCases').onclick=()=>{CS_TAIL=null;syRenderCases();if(syOn()){syPull().then(()=>{if(/recent cases/i.test($('#modalTitle').textContent))syRenderCases()}).catch(e=>{SY.err=String(e.message||e);syStat()})}};
 function sySettingsHtml(){const c=syCfg();let person='';try{person=(store.get(SY_PFX+'_amdl_person',null)||{}).name||''}catch(e){}
   return `<hr style="border:none;border-top:1px solid var(--border);margin:14px 0">
   <div class="field"><label style="display:flex;gap:8px;align-items:center;text-transform:none;letter-spacing:0;font-family:var(--sans);font-size:14px;color:var(--text)"><input type="checkbox" id="sySync" style="width:auto" ${c.on?'checked':''}> Sync Case History Across Devices</label>
