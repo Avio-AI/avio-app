@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="64f0b42 2026-11-21">
+<meta name="avio-build" content="47b6f41 2026-11-21">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
@@ -502,7 +502,7 @@ mark{background:var(--mark-bg);color:inherit}
 .viewseg{display:inline-flex;border:1px solid var(--border);border-radius:999px;overflow:hidden}.viewseg button{border:none;background:none;padding:6px 12px;font:inherit;font-size:13px;color:var(--muted);cursor:pointer}.viewseg button.on{background:var(--tonal);color:var(--on-tonal);font-weight:600}
 .progress{background:var(--panel2);border-radius:4px}.progress div{background:var(--cyan)}
 
-/* Recent cases as a Drive file list */
+/* TS History as a Drive file list */
 .caselist .ci{border-bottom:none;padding:6px 0;gap:12px}
 .caselist .ci:before{content:'build';font-family:'Material Symbols Rounded';font-size:22px;width:40px;height:40px;border-radius:50%;background:var(--tonal);color:var(--on-tonal);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-variation-settings:'FILL' 1}
 .caselist .ci .t div:first-child{font-weight:500;font-size:15px}
@@ -736,7 +736,7 @@ try{if(sessionStorage.getItem('avio_splash'))document.getElementById('splash').r
       <div class="brand"><span class="logo"><span class="ms">flight</span></span><span><span class="fleetpick" id="fleetPick" title="Switch aircraft"><span class="long" id="brandLong">Avio.AI</span><span class="short" id="brandShort">Avio.AI</span><span class="ms caret hidden" id="fleetCaret">arrow_drop_down</span></span><span class="aib" id="aiBadge" role="button" tabindex="0"></span><small id="caseTitle"></small></span></div>
       <div class="dot" id="dataDot" title="Manual data"></div>
       <button class="iconbtn" id="btnNew" title="New case"><span class="ms">add_circle</span></button>
-      <button class="iconbtn" id="btnCases" title="Recent cases"><span class="ms">history</span></button>
+      <button class="iconbtn" id="btnCases" title="TS History"><span class="ms">history</span></button>
       <button class="iconbtn" id="btnExport" title="Export case (PDF)"><span class="ms">download</span></button>
       <button class="iconbtn" id="btnTheme" title="Theme" aria-label="Theme"><span class="ms">brightness_auto</span></button>
       <button class="iconbtn" id="btnHelp" title="Help: guides and feedback" aria-label="Help"><span class="ms">help</span></button>
@@ -3031,7 +3031,7 @@ document.addEventListener('click',async e=>{
 });
 
 /* ═════════════════ MODAL ═════════════════ */
-const TITLE_KEEP=new Set(['AMDL','MEL','MMEL','PDF','CMC','CAS','FIM','ATA','API','AI','PN','SN','LRU','CB']);
+const TITLE_KEEP=new Set(['AMDL','MEL','MMEL','PDF','CMC','CAS','FIM','ATA','API','AI','PN','SN','LRU','CB','TS','WO','RTS','PFI']);
 function niceTitle(t){t=String(t||'');if(!/^[A-Z][A-Z &/·.\-]*$/.test(t))return t;return t.split(' ').map(w=>{const mc=MANS.find(x=>x.toUpperCase()===w);return mc||(TITLE_KEEP.has(w)||/\./.test(w)?w:w.charAt(0)+w.slice(1).toLowerCase())}).join(' ')}
 function showModal(title,html){$('#modalTitle').textContent=niceTitle(title);$('#modalBody').innerHTML=html;$('#modal').classList.remove('hidden','helpfull');$('#modalBody').scrollTop=0}
 function hideModal(){$('#modal').classList.add('hidden');$('#modal').classList.remove('helpfull');$$('#modalBody .pdfpage canvas').forEach(c=>{c.width=0;c.height=0})}
@@ -3349,7 +3349,7 @@ function saveCase(k=CASE){
   else if(cases.length<n0)saveWarn(`Storage is full: the ${n0-cases.length} oldest case${n0-cases.length===1?' was':'s were'} removed from this device to save this one.`);
   if(k===CASE)try{localStorage.setItem(PFX+'_current',JSON.stringify(k.id))}catch(e){}
 }
-// Recent Cases label: TAIL · ATA CC-SS · 21 OCT 2026 (case opened)
+// TS History label: TAIL · ATA CC-SS · 21 OCT 2026 (case opened)
 function caseListLabel(c){
   const f=c.form||{};const tail=String(f.reg||'').toUpperCase()||'No Tail';
   let ata=caseAta(f);
@@ -3357,7 +3357,7 @@ function caseListLabel(c){
   if(!ata&&c.deferral&&typeof melById==='function'&&typeof MEL!=='undefined'&&MEL){const g=melById(c.deferral.mel_id);if(g&&g.ata)ata=g.ata}
   return `${tail} · ATA ${ata||'—'} · ${dmy(new Date(c.created||c.updated))}`;
 }
-// Recent Cases: syRenderCases (below) lists this device's cases and, with case sync on, every device's
+// TS History: syRenderCases (below) lists this device's cases and, with case sync on, every device's
 $('#btnNew').onclick=async()=>{await switchCase(null);try{localStorage.removeItem(PFX+'_current')}catch(e){}resetForm();showIntake()};
 let APPNAME='Avio.AI',SN_HINT='';
 try{for(const k of Object.keys(localStorage))if(/^avio_.*_lastac$/.test(k))localStorage.removeItem(k)}catch(e){} // tails are no longer remembered
@@ -3478,7 +3478,7 @@ saveCase=function(k=CASE){
   _syLocalSave(k);
   if(!k||!syOn())return;syMark(k.id,true);clearTimeout(_syT);_syT=setTimeout(()=>syFlush(),BUSY&&k.running?600:1500);   // mid-answer: share progress sooner
 };
-// Recent Cases: this device + every synced device
+// TS History: this device + every synced device
 function syAll(){
   const loc=loadCases(),ids=new Set(loc.map(c=>c.id)),idx=syIdx();
   const rem=Object.entries(idx).filter(([id])=>!ids.has(id)).map(([id,m])=>({id,remote:true,m,created:m.created,updated:m.updated,named:m.named,title:m.title,by:m.by}));
@@ -3486,11 +3486,11 @@ function syAll(){
 }
 function syLabel(c){const closed=c.remote?c.m.st==='closed':c.status==='closed';const hl=c.remote?c.m.hl:(c.brief&&c.brief.headline);
   if(!c.remote)return caseListLabel(c)+(closed?' · Closed':'')+(hl?' — '+hl:'');const m=c.m;return `${m.reg||'No Tail'} · ATA ${m.ata||'—'} · ${dmy(new Date(m.created||m.updated))}${closed?' · Closed':''}${hl?' — '+hl:''}`}
-// Recent Cases is two levels: the aircraft (tails) of this model first, then that aircraft's cases. Cases with neither a
+// TS History is two levels: the aircraft (tails) of this model first, then that aircraft's cases. Cases with neither a
 // registration nor a serial number go under "General TS", always at the top. A tail's serial number is taken from any of its
 // cases; an aircraft known only by serial number is listed as "S/N …".
 const GEN_TAIL='__general__';
-let CS_TAIL=null;   // the aircraft open in Recent Cases (kept while the list refreshes)
+let CS_TAIL=null;   // the aircraft open in TS History (kept while the list refreshes)
 const caseRegSn=c=>{const f=c.remote?(c.m||{}):(c.form||{});return [String(f.reg||'').trim().toUpperCase(),String(f.sn||'').trim()]};
 function caseTailKey(c){const [r,n]=caseRegSn(c);return r?'R:'+r:n?'S:'+n.toUpperCase():GEN_TAIL}
 function caseTails(cases){const T=new Map();
@@ -3510,7 +3510,7 @@ function syRenderCases(){
   const body=!tail?(all.length?`<div class="caselist">${tails.map(tailRow).join('')}</div>`:'<div class="kv">No saved cases yet.</div>')
     :`<div class="tailhead"><button class="btn2 small" type="button" id="csBack"><span class="ms" style="font-size:18px;vertical-align:-4px">chevron_left</span> Aircraft</button><b>${esc(tailName(tail))}</b>${tail.reg&&tail.sn?`<span class="hint" style="margin:0">S/N ${esc(tail.sn)}</span>`:''}</div>`
      +(cases.length?`<div class="caselist">${cases.map(c=>`<div class="ci"><div class="t" data-id="${c.id}"><div>${esc(syLabel(c).replace(/^[^·]*·\s*/,''))}</div><div>${c.named?esc(c.title)+' · ':''}Updated ${dmyt(c.updated)} · ${(n=>n+(n===1?' reply':' replies'))(reps(c))}${c.by?' · '+esc(c.by):''}${c.remote?' · <span class="ms" style="font-size:14px;vertical-align:-2px" title="Saved on another device">cloud</span>':''}</div></div><button class="btn2 small danger" data-del="${c.id}">Delete</button></div>`).join('')}</div>`:'<div class="kv">No cases for this aircraft yet.</div>');
-  showModal('RECENT CASES',(nImp?`<div class="impcard"><span class="ms">move_to_inbox</span><span>${nImp} case${nImp===1?'':'s'} from another app on this phone</span><button class="btn2 small" id="impOpen">Import</button></div>`:'')+`<div class="hint" id="syStat" style="margin:0 0 6px"></div>`+body);
+  showModal('TS HISTORY',(nImp?`<div class="impcard"><span class="ms">move_to_inbox</span><span>${nImp} case${nImp===1?'':'s'} from another app on this phone</span><button class="btn2 small" id="impOpen">Import</button></div>`:'')+`<div class="hint" id="syStat" style="margin:0 0 6px"></div>`+body);
   syStat();{const b=$('#impOpen');if(b)b.onclick=openImport}
   $$('.caselist [data-tail]').forEach(el=>el.onclick=()=>{CS_TAIL=el.dataset.tail;syRenderCases();const m=$('#modal .sheet')||$('#modal');if(m)m.scrollTop=0});
   {const b=$('#csBack');if(b)b.onclick=()=>{CS_TAIL=null;syRenderCases()}}
@@ -3528,11 +3528,11 @@ function syRenderCases(){
     if(cur)showIntake();
     try{await syDelete(id)}catch(e){SY.err=e.message}syRenderCases()});
 }
-$('#btnCases').onclick=()=>{CS_TAIL=null;syRenderCases();if(syOn()){syPull().then(()=>{if(/recent cases/i.test($('#modalTitle').textContent))syRenderCases()}).catch(e=>{SY.err=String(e.message||e);syStat()})}};
+$('#btnCases').onclick=()=>{CS_TAIL=null;syRenderCases();if(syOn()){syPull().then(()=>{if(/ts history/i.test($('#modalTitle').textContent))syRenderCases()}).catch(e=>{SY.err=String(e.message||e);syStat()})}};
 function sySettingsHtml(){const c=syCfg();let person='';try{person=(store.get(SY_PFX+'_amdl_person',null)||{}).name||''}catch(e){}
   return `<hr style="border:none;border-top:1px solid var(--border);margin:14px 0">
   <div class="field"><label style="display:flex;gap:8px;align-items:center;text-transform:none;letter-spacing:0;font-family:var(--sans);font-size:14px;color:var(--text)"><input type="checkbox" id="sySync" style="width:auto" ${c.on?'checked':''}> Sync Case History Across Devices</label>
-  <div class="hint">Saves every case to your organization's private GitHub repo so Recent Cases is the same on your phone, tablet and computer, for every aircraft type.</div></div>
+  <div class="hint">Saves every case to your organization's private GitHub repo so TS History is the same on your phone, tablet and computer, for every aircraft type.</div></div>
   <div class="field"><label>Technician Name</label><input id="syTech" value="${esc(c.tech||person)}" placeholder="Shown on the cases you start or edit" autocapitalize="words"></div>
   ${BRK.s&&BRK.s.cases_repo&&c.repo===BRK.s.cases_repo?`<div class="hint">Cases are kept in your organization's cases repo through Avio.AI sign-in; access renews by itself.</div>`
   :`<div class="grid2"><div class="field"><label>Cases repo (owner/name)</label><input id="syRepo" value="${esc(c.repo)}" placeholder="your-org/maintenance-cases" autocapitalize="off"></div>
@@ -4563,7 +4563,7 @@ function renderDocs(){
     $$('.docsec').forEach(d=>{d.open=open.includes(d.dataset.sec);d.addEventListener('toggle',()=>{docsSaveOpen();if(d.open&&d.dataset.sec==='mel')initMelPane();if(d.open&&d.dataset.sec==='pfi')initCheckPane()})})}
   const c=CASE,L=c?leParts():[],RT=leTag(),DF=docsForm();
   $('#docsCase').innerHTML=c?`Case: <b>${esc(c.title||'Untitled')}</b>${c.form&&c.form.reg?' · '+esc(c.form.reg):''}${c.form&&c.form.sn?' · S/N '+esc(c.form.sn):''}`:
-    'No case open. Component transactions, log entries and repair tags belong to a case: open one from Recent Cases, start one on Mx Magic, or start a paperwork-only case below.';
+    'No case open. Component transactions, log entries and repair tags belong to a case: open one from TS History, start one on Mx Magic, or start a paperwork-only case below.';
   // 1. component transactions
   $('#dsPartsN').textContent=L.length?String(L.length):'';
   $('#dsParts').innerHTML=!c?`<div class="grid2"><div class="field"><label>Tail Number</label><input id="dsReg" autocomplete="off" autocapitalize="characters" style="text-transform:uppercase" value="${esc(($('#fReg')||{}).value||'')}"></div>
@@ -5045,7 +5045,7 @@ function openImport(){
   $('#impGo').onclick=()=>{let total=0;const lines=[];
     S.forEach((x,j)=>{const on=document.querySelector(`.implist input[data-j="${j}"]`).checked;const v=document.querySelector(`.implist select[data-j="${j}"]`).value;
       if(!on||v==='')return;const e=E[+v];const n=impRun(x.st,e);total+=n;lines.push(`${n} → ${esc(e.t.name||e.t.id||srcLabel(e.src))}`)});
-    $('#impOut').innerHTML=`<div class="kv" style="margin-top:10px">${total?`Imported ${total} case${total===1?'':'s'}: ${lines.join(' · ')}. Open them from Recent Cases.`:'Nothing imported: tick a set and choose its aircraft.'}</div>`;
+    $('#impOut').innerHTML=`<div class="kv" style="margin-top:10px">${total?`Imported ${total} case${total===1?'':'s'}: ${lines.join(' · ')}. Open them from TS History.`:'Nothing imported: tick a set and choose its aircraft.'}</div>`;
     if(total){const c=loadCases();if(CASE)CASE=c.find(x=>x.id===CASE.id)||CASE;if(typeof syFlush==='function')syFlush().catch(()=>{})}};
 }
 
@@ -5638,7 +5638,7 @@ async function caseTrendsTool(i){await fleetLoad();const by=i.by||'fault';const 
   return {summary:`${L.length} case${L.length===1?'':'s'} by ${by}`,data:{cases_counted:L.length,from_other_operators:nf||undefined,by,note:unindexed?`${unindexed} older case${unindexed===1?' has':'s have'} only a headline indexed until they sync again; fault and component counts leave them out.`:undefined,
     rows:rows.slice(0,30).map(e=>({[by==='repeats'?'tail_and_fault':by]:e.key,cases:e.n,examples:e.cases.slice(0,6).map(r=>`${r.id} · ${r.fleet?fleetWho(r.m):r.other?'another operator':r.m.reg||''} · ${r.m.created?dmy(new Date(r.m.created)):''}${r.m.hl?' · '+(r.other?crScrub(r.m.hl,r):r.m.hl).slice(0,80):''}`)}))}}}
 
-// Ask About Cases (Recent Cases): a question about the case history, answered with the case tools
+// Ask About Cases (TS History): a question about the case history, answered with the case tools
 async function askCases(q,out){
   if(!cfg.anthropicKey){out.innerHTML='<div class="errbox">Needs the AI key (Settings → AI).</div>';return}
   await Promise.race([fleetLoad(),new Promise(r=>setTimeout(r,4000))]).catch(()=>{});
