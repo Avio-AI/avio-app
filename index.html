@@ -1,8 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="af0a424 2026-11-23">
+<meta name="avio-build" content="58fc9eb 2026-11-23">
 <meta charset="UTF-8">
+<!-- Page security policy: only the app's own scripts, fonts and styles run here (nothing loaded from other sites, no plugins,
+     no <base> or form hijack). Connections stay open to any https address: each operator's data source and mail watcher
+     live at their own addresses. Inline handlers in the page still need 'unsafe-inline'. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; media-src 'self' data: blob:; connect-src 'self' https: data: blob:; worker-src 'self' blob:; frame-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>/* pinch-zoom stays available (accessibility). iPhone / iPad: maximum-scale only stops the jump-zoom when a box is tapped; iOS still lets you pinch */
 if(/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1))document.querySelector('meta[name=viewport]').content+=', maximum-scale=1.0'</script>
