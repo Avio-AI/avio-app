@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="avio-build" content="a141a8f 2026-11-24">
+<meta name="avio-build" content="b41644f 2026-11-25">
 <meta charset="UTF-8">
 <!-- Page security policy: only the app's own scripts, fonts and styles run here (nothing loaded from other sites, no plugins,
      no <base> or form hijack). Connections stay open to any https address: each operator's data source and mail watcher
@@ -2992,8 +2992,18 @@ async function openPage(docId,page,opt={}){
         <div class="svgbox pdfbox" id="pdfBox"><div class="hint" style="padding:14px;color:#333">Loading the PDF…</div></div>
         <details class="more" style="margin-top:10px"><summary>▸ Page Text</summary><div class="pagetext" id="pdfText">${hlPageText(curPg.text,opt.hl)}</div></details>`;
       const box=$('#pdfBox');let ZP=null,wrap=null,busy=false,last=d.pages;const setZ=(nz,keep)=>{if(ZP)ZP.setZ(nz,keep)};const curZ=()=>ZP?ZP.z:1;
-      $('#pzIn').onclick=()=>setZ(curZ()*1.6);$('#pzOut').onclick=()=>setZ(curZ()/1.6);$('#pzFit').onclick=()=>setZ(1);
-      $('#pzOpen').onclick=async()=>{try{const data=await pdfBytes(ps);window.open(URL.createObjectURL(new Blob([data],{type:'application/pdf'}))+'#page='+cur,'_blank')}catch(e){}};
+      $('#pzIn').onclick=()=>setZ(curZ()*1.6);$('#pzOut').onclick=()=>setZ(curZ()/1.6);
+      // Fit: back to the whole page width, and the whole page brought into view (at normal size it used to change nothing)
+      $('#pzFit').onclick=()=>{setZ(1,false);box.scrollLeft=0;box.scrollTop=0;const mb=$('#modalBody');
+        requestAnimationFrame(()=>mb.scrollTo({top:Math.max(0,mb.scrollTop+box.getBoundingClientRect().top-mb.getBoundingClientRect().top-8),behavior:'smooth'}))};
+      $('#pzOpen').onclick=async()=>{const name=(String(d.path||'').split(/[\\/]/).pop()||curPg.cite||'Manual page').replace(/(\.pdf)?$/i,'.pdf');
+        // the iPhone app: its own PDF viewer, at this page (a web view cannot open a new window)
+        if(window.__avioNativeView){try{await window.__avioNativeView(await pdfBytes(ps),name,cur)}catch(e){alert('Could not open the PDF: '+(e.message||e))}return}
+        // a browser: open the window now, while the tap still counts (Safari blocks one opened after the download), then load it
+        const w=window.open('','_blank');
+        try{const data=await pdfBytes(ps);const u=URL.createObjectURL(new Blob([data],{type:'application/pdf'}))+'#page='+cur;
+          if(w&&!w.closed)w.location.href=u;else location.assign(u)}
+        catch(e){if(w&&!w.closed)w.close();alert('Could not open the PDF: '+(e.message||e))}};
       const note=r=>{const n=$('#hlNote');if(n)n.innerHTML=r.hits?`Highlighted: <b>${esc(want)}</b> · ${r.hits} place${r.hits>1?'s':''}`:`<b>${esc(want)}</b> isn't marked on this page. Try Text, or another page.`};
       try{const r=await renderPdfPage(box,ps,cur,opt.hl);if(!document.body.contains(box))return;wrap=r.wrap;last=Math.min(d.pages||r.numPages,r.numPages);ZP=attachZoomPan(box,wrap,5);note(r);setNav();
         const h=wrap.querySelector('.hl');if(h){setZ(1.8,false);requestAnimationFrame(()=>{const br=box.getBoundingClientRect(),hr=h.getBoundingClientRect();box.scrollTop+=hr.top-br.top-box.clientHeight/3;box.scrollLeft+=hr.left-br.left-box.clientWidth/4})}}
@@ -6516,11 +6526,14 @@ function openTechOps(){
   window.avioNative.openInbox=id=>{IB_LAST=0;ibCheck().then(()=>openInbox(id||undefined))};
   // Files the page makes (PDFs, Markdown, log entries) are in-page blob: links, which a web view cannot open in a new
   // window. Hand them to the app, which shows the iOS share sheet (Save to Files, Mail, AirDrop, Print).
+  const b64=u=>{let bin='';for(let i=0;i<u.length;i+=32768)bin+=String.fromCharCode.apply(null,u.subarray(i,i+32768));return btoa(bin)};
   const sendFile=async(href,name)=>{
-    try{const b=await (await fetch(href)).blob(),u=new Uint8Array(await b.arrayBuffer());let bin='';
-      for(let i=0;i<u.length;i+=32768)bin+=String.fromCharCode.apply(null,u.subarray(i,i+32768));
-      h.postMessage({download:{name:name||'Avio.AI file',mime:b.type||'application/octet-stream',data:btoa(bin)}})}
+    try{const b=await (await fetch(href)).blob(),u=new Uint8Array(await b.arrayBuffer());
+      h.postMessage({download:{name:name||'Avio.AI file',mime:b.type||'application/octet-stream',data:b64(u)}})}
     catch(e){alert('Could not save the file: '+(e.message||e))}};
+  // Open PDF: the app shows the manual PDF in its viewer at this page (view, page); an app build without the viewer
+  // treats it as a download and opens the share sheet
+  window.__avioNativeView=async(bytes,name,page)=>{h.postMessage({download:{name:name||'Manual.pdf',mime:'application/pdf',data:b64(bytes),view:true,page:page||1}})};
   const fileLink=a=>{const href=a&&a.getAttribute&&a.getAttribute('href')||'';return /^(blob:|data:)/.test(href)?href:''};
   document.addEventListener('click',e=>{const a=e.target&&e.target.closest&&e.target.closest('a');const href=fileLink(a);
     if(!href)return;e.preventDefault();e.stopPropagation();sendFile(href,a.getAttribute('download'))},true);
